@@ -4,6 +4,10 @@ from dummy_function import dummy_predict, dummy_get_drop_off, DUMMY_START_POINT
 import pydeck as pdk
 import pandas as pd
 import requests
+from openrouteservice import convert
+import openrouteservice
+from key import GEO_KEY
+from route_functions import get_route
 
 st.title("Trash-optimizer Front")
 
@@ -62,46 +66,49 @@ if img:
         drop_off = dummy_get_drop_off()
         pick_up = DUMMY_START_POINT
 
-        # Points dataframe
+        client = openrouteservice.Client(key=GEO_KEY)
+        route = get_route(pick_up,drop_off,client)
+        coords = route["features"][0]["geometry"]["coordinates"]
+
+                # Conversion des coords en DataFrame
+        df_path = pd.DataFrame({
+            "path": [coords]
+        })
+
+        # Points de début/fin pour afficher des marqueurs
         df_points = pd.DataFrame([
-            {"lat": pick_up["lat"], "lon": pick_up["lon"], "name": "Pick Up"},
-            {"lat": drop_off["lat"], "lon": drop_off["lon"], "name": "Drop Off"},
-        ])
+    {"lon": pick_up["lon"], "lat": pick_up["lat"], "name": "Start"},
+    {"lon": drop_off["lon"], "lat": drop_off["lat"], "name": "End"},
+])
 
-        # Line dataframe
-        df_line = pd.DataFrame([{
-            "source": [pick_up["lon"], pick_up["lat"]],
-            "target": [drop_off["lon"], drop_off["lat"]],
-        }])
-
+                # Layer : points
         point_layer = pdk.Layer(
             "ScatterplotLayer",
             df_points,
             get_position='[lon, lat]',
-            get_radius=30,
-            get_color=[200, 30, 0],
-            pickable=True
+            get_color='[200, 30, 0]',
+            get_radius=40,
         )
 
-        line_layer = pdk.Layer(
-            "LineLayer",
-            df_line,
-            get_source_position='source',
-            get_target_position='target',
+        # Layer : la route (pas une ligne droite !)
+        route_layer = pdk.Layer(
+            "PathLayer",
+            df_path,
+            get_path="path",
             get_color=[0, 100, 200],
-            get_width=4
+            width_scale=10,
+            width_min_pixels=3,
         )
 
-        view = pdk.ViewState(
-            latitude=(pick_up["lat"] + drop_off["lat"]) / 2,
-            longitude=(pick_up["lon"] + drop_off["lon"]) / 2,
+        view_state = pdk.ViewState(
+            latitude=df_points["lat"].mean(),
+            longitude=df_points["lon"].mean(),
             zoom=14
         )
 
-        r = pdk.Deck(
-            layers=[point_layer, line_layer],
-            initial_view_state=view,
-            tooltip={"text": "{name}"}
+        route_map = pdk.Deck(
+            layers=[point_layer, route_layer],
+            initial_view_state=view_state
         )
 
-        st.pydeck_chart(r)
+        st.pydeck_chart(route_map)
