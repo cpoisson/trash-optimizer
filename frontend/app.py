@@ -13,6 +13,8 @@ choice = st.radio(
     ("Upload a file", "Take a picture")
 )
 
+uploaded_file = None
+camera_image = None
 img = None
 
 # Step 2 — Display the appropriate input widget
@@ -40,7 +42,10 @@ if img:
     # Bouton
     if st.button("Launch the prediction"):
         status.info("Running prediction...")  # affichage temporaire
-        files = {"file": uploaded_file.getvalue()}  # envoie l'image brute
+        if uploaded_file:
+            files = {"file": uploaded_file.getvalue()}  # envoie l'image brute
+        elif camera_image:
+            files = {"file": camera_image.getvalue()}  # envoie l'image brute
         # Si ton API attend plutôt un form-data multipart
         result_list = requests.post("http://localhost:8000/predict", files=files)
 
