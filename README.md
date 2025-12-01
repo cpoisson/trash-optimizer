@@ -1,6 +1,6 @@
 # Trash Optimizer
 
-![Trash Optimizer](doc/assets/logo-squared-center.png)
+![Log](doc/assets/logo-squared-centered.png)
 
 Identify, Navigate, Trash
 
