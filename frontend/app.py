@@ -3,6 +3,7 @@ from PIL import Image
 from dummy_function import dummy_predict, dummy_get_drop_off, DUMMY_START_POINT
 import pydeck as pdk
 import pandas as pd
+import requests
 
 st.title("Trash-optimizer Front")
 
@@ -39,13 +40,18 @@ if img:
     # Bouton
     if st.button("Launch the prediction"):
         status.info("Running prediction...")  # affichage temporaire
+        files = {"file": uploaded_file.getvalue()}  # envoie l'image brute
+        # Si ton API attend plutôt un form-data multipart
+        result_list = requests.post("http://localhost:8000/predict", files=files)
 
         # Calcul de la prédiction
-        result_dict = dummy_predict()
+        # result_dict = dummy_predict()
 
         # Mise à jour du conteneur avec le résultat
         status.success("Prediction done!")  # change le message
-        st.json(result_dict)  # ou st.write(result_dict)
+        for i, item in enumerate(result_list):
+                    st.subheader(f"Prediction {i+1}")
+                    st.write(item)
 
         drop_off = dummy_get_drop_off()
         pick_up = DUMMY_START_POINT
