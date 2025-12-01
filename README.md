@@ -1,6 +1,8 @@
 # Trash Optimizer
 
-![Trash Optimizer](doc/assets/logo-squared-center.png)
+<p align=center>
+<img src="doc/assets/logo-squared-centered.png" alt="Logo" width="300"/>
+</p>
 
 Identify, Navigate, Trash
 
@@ -12,11 +14,11 @@ This project uses `pyenv` for Python version management.
 ### Dev shared environment
 
 For the sake of simplicity let's start with a shared dev environement.
-Please not that each components (front, backends) will have there own prod environments moving forward.
+Please note that each components (front, backends) will have there own prod environments moving forward.
 
 ```bash
 # Install Python version
-`pyenv install`
+pyenv install
 
 # Create virtual environment with specific name
 pyenv virtualenv 3.12 trash-optimizer
