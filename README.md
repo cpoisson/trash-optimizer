@@ -1,6 +1,6 @@
 # Trash Optimizer
 
-![Trash Optimizer](doc/assets/trash-optimizer.png)
+![Trash Optimizer](doc/assets/logo-squared-center.png)
 
 Identify, Navigate, Trash
 
@@ -16,7 +16,7 @@ Please not that each components (front, backends) will have there own prod envir
 
 ```bash
 # Install Python version
-pyenv install
+`pyenv install`
 
 # Create virtual environment with specific name
 pyenv virtualenv 3.12 trash-optimizer
