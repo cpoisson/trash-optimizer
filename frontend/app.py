@@ -47,7 +47,8 @@ if img:
         elif camera_image:
             files = {"file": camera_image.getvalue()}  # envoie l'image brute
         # Si ton API attend plutôt un form-data multipart
-        result_list = requests.post("http://localhost:8000/predict", files=files)
+        response = requests.post("http://localhost:8000/predict", files=files)
+        result_list = response.json()
 
         # Calcul de la prédiction
         # result_dict = dummy_predict()
