@@ -27,7 +27,7 @@ for card in soup.select("article.cp-card"):
         "types": ", ".join(types),
         "link": link
     })
-
+ #Little change for push
 # Créer le DataFrame et sauvegarder en CSV
 df = pd.DataFrame(data)
 print(df)
