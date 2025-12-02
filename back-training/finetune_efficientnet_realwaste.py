@@ -1,0 +1,174 @@
+# finetune_efficientnet.py
+# This script fine-tunes a pre-trained EfficientNet model on a custom dataset.
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms, models
+from torch.utils.data import DataLoader, Dataset
+from pathlib import Path
+import time
+
+# Fine-tuning will based on https://www.kaggle.com/datasets/joebeachcapital/realwaste dataset
+# Classifying images into the following waste categories:
+# "Cardboard", "Food Organics", "Glass", "Metal",
+# "Miscellaneous Trash", "Paper", "Plastic",
+# "Textile Trash", "Vegetation"
+
+ROOT_DIR = Path('/Users/charles/Data/trash-optimizer/realwaste/RealWaste')  # Update this path to your dataset location
+# The dataset is not organized into train/val/test splits, so we will create our own splits.
+# The current is organized as follows:
+# root
+# ├── Cardboard
+# ├── Food Organics
+# ├── Glass
+# ├── Metal
+# ├── Miscellaneous Trash
+# ├── Paper
+# ├── Plastic
+# ├── Textile Trash
+# └── Vegetation
+
+class RealWasteDataset(Dataset):
+    '''Custom Dataset for Real Waste Images'''
+    def __init__(self, root_dir, transform=None):
+        self.dataset = datasets.ImageFolder(root=root_dir, transform=transform)
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return self.dataset[idx]
+
+    def get_classes(self):
+        return self.dataset.classes
+
+    def get_class_to_idx(self):
+        return self.dataset.class_to_idx
+
+    def get_class_num(self):
+        return len(self.dataset.classes)
+
+
+
+def get_data_loaders(root_dir, batch_size=32, test_split=0.2):
+    '''Create Data Loaders for Training and Validation'''
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    full_dataset = RealWasteDataset(root_dir=root_dir, transform=transform)
+    dataset_size = len(full_dataset)
+    indices = list(range(dataset_size))
+    split = int(test_split * dataset_size)
+
+    train_indices, val_indices = indices[split:], indices[:split]
+
+    train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
+    val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
+
+    train_loader = DataLoader(full_dataset, batch_size=batch_size, sampler=train_sampler)
+    val_loader = DataLoader(full_dataset, batch_size=batch_size, sampler=val_sampler)
+
+    return train_loader, val_loader
+
+
+def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30, learning_rate=0.001):
+    '''Fine-tune EfficientNet on the custom dataset. Train history is returned for further analysis if needed.'''
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = models.efficientnet_b0(pretrained=True)
+    model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+    model = model.to(device)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    history = {'train_loss': [], 'val_accuracy': [], 'epoch_times': []}
+
+    for epoch in range(num_epochs):
+        print(f'Starting epoch {epoch+1}/{num_epochs}')
+        time_start = time.time()
+        model.train()
+        running_loss = 0.0
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item() * inputs.size(0)
+
+        epoch_loss = running_loss / len(train_loader.dataset)
+        print(f'Epoch {epoch+1}/{num_epochs}, Training Loss: {epoch_loss:.4f}')
+
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        val_accuracy = correct / total
+        print(f'Epoch {epoch+1}/{num_epochs}, Validation Accuracy: {val_accuracy:.4f}')
+        history['train_loss'].append(epoch_loss)
+        history['val_accuracy'].append(val_accuracy)
+
+        # save intermediate model every epochs
+        time_end = time.time()
+        epoch_time = time_end - time_start
+        history['epoch_times'].append(epoch_time)
+        print(f'Epoch {epoch+1} completed in {epoch_time:.2f} seconds.')
+
+        save_path = f'fine_tuned_efficientnet_epoch_{epoch+1}.pth'
+        save_model(model, path=save_path)
+        history_path = f'training_history_epoch_{epoch+1}.txt'
+        save_history(history, path=history_path)
+
+    return model, history
+
+def save_model(model, path='fine_tuned_efficientnet.pth'):
+    '''Save the fine-tuned model'''
+    torch.save(model.state_dict(), path)
+    print(f'Model saved to {path}')
+
+def save_class_mapping(class_to_idx, path='class_mapping.txt'):
+    '''Save the class to index mapping to be opened as a dictionary later'''
+    with open(path, 'w') as f:
+        for class_name, idx in class_to_idx.items():
+            f.write(f'{class_name}:{idx}\n')
+    print(f'Class mapping saved to {path}')
+
+def save_history(history, path='training_history.txt'):
+    '''Save the training history to a text file'''
+    with open(path, 'w') as f:
+        for epoch in range(len(history['train_loss'])):
+            f.write(f'Epoch {epoch+1}: Train Loss: {history["train_loss"][epoch]}, Val Accuracy: {history["val_accuracy"][epoch]}\n')
+    print(f'Training history saved to {path}')
+
+if __name__ == '__main__':
+
+    print("Loading dataset... at ", ROOT_DIR)
+    dataset = RealWasteDataset(ROOT_DIR)
+
+    print("Classes: ", dataset.get_classes())
+    print("Class to Index Mapping: ", dataset.get_class_to_idx())
+    print("Number of Classes: ", dataset.get_class_num())
+
+    num_classes = dataset.get_class_num()
+
+    train_loader, val_loader = get_data_loaders(ROOT_DIR, batch_size=32, test_split=0.2)
+    fine_tuned_model, history = fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=10, learning_rate=0.001)
+
+    save_model(fine_tuned_model, path='fine_tuned_efficientnet.pth')
+    save_class_mapping(dataset.get_class_to_idx(), path='class_mapping.txt')
+    save_history(history, path='training_history.txt')
