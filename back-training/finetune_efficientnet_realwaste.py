@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 # Get DATASET_ROOT_DIR from environment variable DATASET_ROOT_DIR
 load_dotenv()  # Load environment variables from .env file if present
 DATASET_ROOT_DIR = os.getenv('DATASET_ROOT_DIR')
-RESULTS_DIR = os.getenv('RESULTS_ROOT_DIR')
+RESULTS_ROOT_DIR = os.getenv('RESULTS_ROOT_DIR')
 
 # The dataset is not organized into train/val/test splits, so we will create our own splits.
 # The current is organized as follows:
@@ -208,6 +208,11 @@ def save_history(history, path='training_history.txt'):
 
 if __name__ == '__main__':
 
+    if DATASET_ROOT_DIR is None:
+        raise ValueError("DATASET_ROOT_DIR environment variable is not set")
+    if RESULTS_ROOT_DIR is None:
+        raise ValueError("RESULTS_ROOT_DIR environment variable is not set")
+
     print("Loading dataset... at ", DATASET_ROOT_DIR)
     dataset = RealWasteDataset(DATASET_ROOT_DIR)
 
@@ -221,9 +226,8 @@ if __name__ == '__main__':
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
     model_name = "efficientnet_b0"
     dataset_name = "realwaste"
-    if RESULTS_DIR is None:
-        raise ValueError("RESULTS_ROOT_DIR environment variable is not set")
-    output_dir = os.path.join(RESULTS_DIR, f"{timestamp}_{model_name}_{dataset_name}")
+
+    output_dir = os.path.join(RESULTS_ROOT_DIR, f"{timestamp}_{model_name}_{dataset_name}")
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
