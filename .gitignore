@@ -18,7 +18,7 @@ venv/
 env/
 ENV/
 .venv
-
+.python-version
 # IDE
 .vscode/
 .idea/
