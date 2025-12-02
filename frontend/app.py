@@ -1,13 +1,14 @@
 import streamlit as st
 from PIL import Image
-from dummy_function import dummy_predict, dummy_get_drop_off, DUMMY_START_POINT
+from dummy_function import dummy_predict, dummy_get_drop_off
+from dummy_function import DUMMY_START_POINT
 import pydeck as pdk
 import pandas as pd
 import requests
 from openrouteservice import convert
 import openrouteservice
 from key import GEO_KEY
-from route_functions import get_route
+from route_functions import get_route,get_dropoff
 
 st.title("Trash-optimizer Front")
 
@@ -63,10 +64,10 @@ if img:
                     st.subheader(f"Prediction {i+1}")
                     st.write(item)
 
-        drop_off = dummy_get_drop_off()
-        pick_up = DUMMY_START_POINT
-
         client = openrouteservice.Client(key=GEO_KEY)
+        pick_up = DUMMY_START_POINT
+        drop_off = get_dropoff(client=client)
+
         route = get_route(pick_up,drop_off,client)
         coords = route["features"][0]["geometry"]["coordinates"]
 

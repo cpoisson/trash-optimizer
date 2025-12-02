@@ -10,6 +10,8 @@ DUMMY_START_POINT  = {"lat": 47.2109096, "lon":-1.5501935}
 
 DUMMY_LIST_TRASH = ['metal','bio']
 
+DUMMY_PROBABILITY_THRESHOLD = 0
+
 DUMMY_DATAFRAME_GEOLOC =  pd.DataFrame([
     {"name": "Spot_1", "lat": 47.2129, "lon": -1.5479, "trash_type": "bio_hazard"},
     {"name": "Spot_2", "lat": 47.2142, "lon": -1.5494, "trash_type": "metal"},
