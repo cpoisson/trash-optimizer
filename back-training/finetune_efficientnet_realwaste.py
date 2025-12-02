@@ -11,6 +11,7 @@ import time
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import matplotlib.pyplot as plt
 
 # Fine-tuning will based on https://www.kaggle.com/datasets/joebeachcapital/realwaste dataset
 # Classifying images into the following waste categories:
@@ -221,6 +222,34 @@ def save_history(history, path='training_history.txt'):
             f.write(f'Epoch {epoch+1}: Train Loss: {history["train_loss"][epoch]}, Train Accuracy: {history["train_accuracy"][epoch]}, Val Accuracy: {history["val_accuracy"][epoch]}\n')
     print(f'Training history saved to {path}')
 
+def plot_training_curves(history, path='training_curves.png'):
+    '''Plot training loss, training accuracy, and validation accuracy over epochs'''
+    epochs = range(1, len(history['train_loss']) + 1)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+
+    # Plot training loss
+    ax1.plot(epochs, history['train_loss'], 'b-', label='Training Loss', linewidth=2)
+    ax1.set_xlabel('Epoch', fontsize=12)
+    ax1.set_ylabel('Loss', fontsize=12)
+    ax1.set_title('Training Loss over Epochs', fontsize=14, fontweight='bold')
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+
+    # Plot training and validation accuracy
+    ax2.plot(epochs, history['train_accuracy'], 'g-', label='Training Accuracy', linewidth=2)
+    ax2.plot(epochs, history['val_accuracy'], 'r-', label='Validation Accuracy', linewidth=2)
+    ax2.set_xlabel('Epoch', fontsize=12)
+    ax2.set_ylabel('Accuracy', fontsize=12)
+    ax2.set_title('Accuracy over Epochs', fontsize=14, fontweight='bold')
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f'Training curves saved to {path}')
+
 if __name__ == '__main__':
 
     if DATASET_ROOT_DIR is None:
@@ -252,3 +281,4 @@ if __name__ == '__main__':
     save_model(fine_tuned_model, path=os.path.join(output_dir, 'final_model.pth'))
     save_class_mapping(dataset.get_class_to_idx(), path=os.path.join(output_dir, 'class_mapping.txt'))
     save_history(history, path=os.path.join(output_dir, 'training_history.txt'))
+    plot_training_curves(history, path=os.path.join(output_dir, 'training_curves.png'))
