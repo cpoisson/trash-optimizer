@@ -102,7 +102,11 @@ def get_data_loaders(root_dir, batch_size=32, test_split=0.2):
     return train_loader, val_loader
 
 
-def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30, learning_rate=0.0001, output_dir='.'):
+def fine_tune_efficientnet(
+    num_classes, train_loader, val_loader,
+    num_epochs=30, learning_rate=0.0001, early_stopping_patience=10,
+    output_dir='.'
+):
     '''Fine-tune EfficientNet on the custom dataset. Train history is returned for further analysis if needed.'''
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -122,6 +126,7 @@ def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30,
 
     history = {'train_loss': [], 'train_accuracy': [], 'val_accuracy': [], 'epoch_times': []}
     best_val_accuracy = 0.0
+    epochs_without_improvement = 0
 
     for epoch in range(num_epochs):
         print(f'\nStarting epoch {epoch+1}/{num_epochs}')
@@ -176,9 +181,19 @@ def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30,
         # Save best model only
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
+            epochs_without_improvement = 0
             save_path = os.path.join(output_dir, 'best_model.pth')
             save_model(model, path=save_path)
             print(f'New best model saved with validation accuracy: {val_accuracy:.4f}')
+        else:
+            epochs_without_improvement += 1
+            print(f'No improvement for {epochs_without_improvement} epoch(s)')
+
+        # Early stopping check
+        if epochs_without_improvement >= early_stopping_patience:
+            print(f'\nEarly stopping triggered after {epoch+1} epochs')
+            print(f'Best validation accuracy: {best_val_accuracy:.4f}')
+            break
 
         time_end = time.time()
         epoch_time = time_end - time_start
@@ -232,7 +247,7 @@ if __name__ == '__main__':
     print(f"Output directory: {output_dir}")
 
     train_loader, val_loader = get_data_loaders(DATASET_ROOT_DIR, batch_size=32, test_split=0.2)
-    fine_tuned_model, history = fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=50, learning_rate=0.0001, output_dir=output_dir)
+    fine_tuned_model, history = fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=50, learning_rate=0.0001, output_dir=output_dir, early_stopping_patience=10)
 
     save_model(fine_tuned_model, path=os.path.join(output_dir, 'final_model.pth'))
     save_class_mapping(dataset.get_class_to_idx(), path=os.path.join(output_dir, 'class_mapping.txt'))
