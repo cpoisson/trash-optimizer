@@ -9,9 +9,23 @@ from openrouteservice import convert
 import openrouteservice
 from key import GEO_KEY
 from route_functions import get_route,get_dropoff
+from geopy.geocoders import Nominatim
 
 st.title("Trash-optimizer Front")
 
+st.write("### Where do you want to pick it from ?")
+address = st.text_input("Enter your adress :")
+if address:
+    geolocator = Nominatim(user_agent="streamlit_app")
+    try:
+        location = geolocator.geocode(address)
+        if location:
+            st.success(f"Adresse localisée : latitude {location.latitude}, longitude {location.longitude}")
+            user_input = location.latitude, location.longitude
+        else:
+            st.error("Adresse introuvable. Vérifiez l'orthographe.")
+    except Exception as e:
+            st.error(f"Erreur lors du géocodage : {e}")
 # Step 1 — Let user choose how to provide the image
 choice = st.radio(
     "Choose how to provide an image:",
@@ -37,7 +51,7 @@ elif choice == "Take a picture":
         img = Image.open(camera_image)
 
 # Step 3 — Unified output once the image exists
-if img:
+if img and user_input:
     st.image(img, caption="Image received")
     st.success("Image loaded!")
 
@@ -65,7 +79,10 @@ if img:
                     st.write(item)
 
         client = openrouteservice.Client(key=GEO_KEY)
-        pick_up = DUMMY_START_POINT
+        pick_up = {"lat": user_input[0],
+                      "lon":user_input[1],
+                      "trash_type":"User Start Point",
+                      "distance": 0}
         drop_off_list = get_dropoff(client=client)
 
 #         #Starting with a single point
