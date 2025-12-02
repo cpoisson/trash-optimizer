@@ -1,0 +1,4 @@
+streamlit
+pydeck
+pandas
+requests
