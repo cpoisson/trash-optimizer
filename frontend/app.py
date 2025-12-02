@@ -141,7 +141,17 @@ if img and user_input:
             get_color='[200, 30, 0]',
             get_radius=40,
         )
-
+        # Text Layer pour les libellés sur les points
+        text_layer = pdk.Layer(
+        "TextLayer",
+        df_points,
+        pickable=True,
+        get_position='[lon, lat]',
+        get_text="name",
+        get_color=[0, 0, 0],
+        get_size=16,
+        get_alignment_baseline="'bottom'",
+    )
         # Layer : la route (pas une ligne droite !)
         route_layer = pdk.Layer(
             "PathLayer",
@@ -159,8 +169,12 @@ if img and user_input:
         )
 
         route_map = pdk.Deck(
-            layers=[point_layer, route_layer],
-            initial_view_state=view_state
-        )
+        layers=[point_layer, route_layer, text_layer],
+        initial_view_state=view_state
+    )
 
         st.pydeck_chart(route_map)
+
+
+        st.subheader("Distances")
+        st.dataframe(df_points[["name", "distance"]])
