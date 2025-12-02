@@ -66,22 +66,56 @@ if img:
 
         client = openrouteservice.Client(key=GEO_KEY)
         pick_up = DUMMY_START_POINT
-        drop_off = get_dropoff(client=client)
+        drop_off_list = get_dropoff(client=client)
 
-        route = get_route(pick_up,drop_off,client)
-        coords = route["features"][0]["geometry"]["coordinates"]
+#         #Starting with a single point
+#         drop_off = drop_off_list[0]
 
-                # Conversion des coords en DataFrame
-        df_path = pd.DataFrame({
-            "path": [coords]
-        })
+#         route = get_route(pick_up,drop_off,client)
+#         coords = route["features"][0]["geometry"]["coordinates"]
 
-        # Points de début/fin pour afficher des marqueurs
-        df_points = pd.DataFrame([
-    {"lon": pick_up["lon"], "lat": pick_up["lat"], "name": "Start"},
-    {"lon": drop_off["lon"], "lat": drop_off["lat"], "name": "End"},
-])
+#                 # Conversion des coords en DataFrame
+#         df_path = pd.DataFrame({
+#             "path": [coords]
+#         })
 
+#         # Points de début/fin pour afficher des marqueurs
+#         df_points = pd.DataFrame([
+#     {"lon": pick_up["lon"], "lat": pick_up["lat"], "name": "Start"},
+#     {"lon": drop_off["lon"], "lat": drop_off["lat"], "name": drop_off["trash_type"]},
+# ])
+#
+
+        all_routes = []
+        all_paths = []
+        all_points = []
+
+        all_points.append({
+                "lon": pick_up["lon"],
+                "lat": pick_up["lat"],
+                "name": "Start"
+            })
+
+        for drop_off in drop_off_list:
+            # Calcul de route
+            route = get_route(all_points[-1], drop_off, client)
+            coords = route["features"][0]["geometry"]["coordinates"]
+
+            # Stockage du chemin
+            all_paths.append({"trash_type": drop_off["trash_type"], "path": coords})
+
+            # Stockage des points (départ + arrivée)
+
+            all_points.append({
+                "lon": drop_off["lon"],
+                "lat": drop_off["lat"],
+                "name": drop_off["trash_type"],
+                "distance":drop_off["distance"]
+            })
+
+        # DataFrames finaux
+        df_path = pd.DataFrame(all_paths)
+        df_points = pd.DataFrame(all_points)
                 # Layer : points
         point_layer = pdk.Layer(
             "ScatterplotLayer",

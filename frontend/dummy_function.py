@@ -6,21 +6,24 @@ DUMMY_PREDICT_RESULT = [{
 
 DUMMY_DROP_OFF = {"lat": 47.2138, "lon": -1.5487}
 
-DUMMY_START_POINT  = {"lat": 47.2109096, "lon":-1.5501935}
+DUMMY_START_POINT  = {"lat": 47.2109096,
+                      "lon":-1.5501935,
+                      "trash_type":"User Start Point",
+                      "distance": 0}
 
 DUMMY_LIST_TRASH = ['metal','bio']
 
 DUMMY_PROBABILITY_THRESHOLD = 0
 
-DUMMY_DATAFRAME_GEOLOC =  pd.DataFrame([
-    {"name": "Spot_1", "lat": 47.2129, "lon": -1.5479, "trash_type": "bio_hazard"},
-    {"name": "Spot_2", "lat": 47.2142, "lon": -1.5494, "trash_type": "metal"},
-    {"name": "Spot_3", "lat": 47.2116, "lon": -1.5481, "trash_type": "metal"},
-    {"name": "Spot_4", "lat": 47.2131, "lon": -1.5507, "trash_type": "bio_hazard"},
-    {"name": "Spot_5", "lat": 47.2122, "lon": -1.5511, "trash_type": "metal"},
-    {"name": "Spot_6", "lat": 47.2107, "lon": -1.5498, "trash_type": "bio_hazard"},
-    {"name": "Spot_7", "lat": 47.2115, "lon": -1.5519, "trash_type": "metal"},
-    {"name": "Spot_8", "lat": 47.2127, "lon": -1.5502, "trash_type": "bio_hazard"},
+DUMMY_DATAFRAME_GEOLOC = pd.DataFrame([
+    {"name": "Spot_1", "lat": 47.2180, "lon": -1.5530, "trash_type": "bio_hazard"},  # nord-ouest
+    {"name": "Spot_2", "lat": 47.2250, "lon": -1.5370, "trash_type": "metal"},       # nord-est
+    {"name": "Spot_3", "lat": 47.2000, "lon": -1.5400, "trash_type": "metal"},       # sud-est
+    {"name": "Spot_4", "lat": 47.2050, "lon": -1.5550, "trash_type": "bio_hazard"},  # sud-ouest
+    {"name": "Spot_5", "lat": 47.2300, "lon": -1.5500, "trash_type": "metal"},       # nord
+    {"name": "Spot_6", "lat": 47.1950, "lon": -1.5450, "trash_type": "bio_hazard"},  # sud
+    {"name": "Spot_7", "lat": 47.2100, "lon": -1.5300, "trash_type": "metal"},       # est
+    {"name": "Spot_8", "lat": 47.2150, "lon": -1.5650, "trash_type": "bio_hazard"},  # ouest
 ])
 
 def dummy_predict():

@@ -49,4 +49,7 @@ def get_dropoff(client,trash_dict= DUMMY_PREDICT_RESULT,starting_point = DUMMY_S
 
     idx = df_geoloc.groupby("trash_type")["distance"].idxmin()
     df_min_per_type = df_geoloc.loc[idx].reset_index(drop=True)
-    return df_min_per_type
+    return [
+    {"trash_type": row["trash_type"], "lat": row["lat"], "lon": row["lon"], "distance": row["distance"]}
+    for _, row in df_min_per_type.iterrows()
+]
