@@ -104,7 +104,7 @@ def get_data_loaders(root_dir, batch_size=32, test_split=0.2):
 
 def fine_tune_efficientnet(
     num_classes, train_loader, val_loader,
-    num_epochs=30, learning_rate=0.0001, early_stopping_patience=10,
+    num_epochs=10, learning_rate=0.0001, early_stopping_patience=10,
     output_dir='.'
 ):
     '''Fine-tune EfficientNet on the custom dataset. Train history is returned for further analysis if needed.'''
