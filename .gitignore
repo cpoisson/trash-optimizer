@@ -19,9 +19,12 @@ env/
 ENV/
 .venv
 .python-version
+.env
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
