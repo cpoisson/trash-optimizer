@@ -1,16 +1,31 @@
 import streamlit as st
 from PIL import Image
-from dummy_function import dummy_predict, dummy_get_drop_off, DUMMY_START_POINT
+from dummy_function import dummy_predict, dummy_get_drop_off
+from dummy_function import DUMMY_START_POINT
 import pydeck as pdk
 import pandas as pd
 import requests
 from openrouteservice import convert
 import openrouteservice
 from key import GEO_KEY
-from route_functions import get_route
+from route_functions import get_route,get_dropoff
+from geopy.geocoders import Nominatim
 
 st.title("Trash-optimizer Front")
 
+st.write("### Where do you want to pick it from ?")
+address = st.text_input("Enter your adress :")
+if address:
+    geolocator = Nominatim(user_agent="streamlit_app")
+    try:
+        location = geolocator.geocode(address)
+        if location:
+            st.success(f"Adresse localisée : latitude {location.latitude}, longitude {location.longitude}")
+            user_input = location.latitude, location.longitude
+        else:
+            st.error("Adresse introuvable. Vérifiez l'orthographe.")
+    except Exception as e:
+            st.error(f"Erreur lors du géocodage : {e}")
 # Step 1 — Let user choose how to provide the image
 choice = st.radio(
     "Choose how to provide an image:",
@@ -36,7 +51,7 @@ elif choice == "Take a picture":
         img = Image.open(camera_image)
 
 # Step 3 — Unified output once the image exists
-if img:
+if img and user_input:
     st.image(img, caption="Image received")
     st.success("Image loaded!")
 
@@ -63,24 +78,61 @@ if img:
                     st.subheader(f"Prediction {i+1}")
                     st.write(item)
 
-        drop_off = dummy_get_drop_off()
-        pick_up = DUMMY_START_POINT
-
         client = openrouteservice.Client(key=GEO_KEY)
-        route = get_route(pick_up,drop_off,client)
-        coords = route["features"][0]["geometry"]["coordinates"]
+        pick_up = {"lat": user_input[0],
+                      "lon":user_input[1],
+                      "trash_type":"User Start Point",
+                      "distance": 0}
+        drop_off_list = get_dropoff(client=client)
 
-                # Conversion des coords en DataFrame
-        df_path = pd.DataFrame({
-            "path": [coords]
-        })
+#         #Starting with a single point
+#         drop_off = drop_off_list[0]
 
-        # Points de début/fin pour afficher des marqueurs
-        df_points = pd.DataFrame([
-    {"lon": pick_up["lon"], "lat": pick_up["lat"], "name": "Start"},
-    {"lon": drop_off["lon"], "lat": drop_off["lat"], "name": "End"},
-])
+#         route = get_route(pick_up,drop_off,client)
+#         coords = route["features"][0]["geometry"]["coordinates"]
 
+#                 # Conversion des coords en DataFrame
+#         df_path = pd.DataFrame({
+#             "path": [coords]
+#         })
+
+#         # Points de début/fin pour afficher des marqueurs
+#         df_points = pd.DataFrame([
+#     {"lon": pick_up["lon"], "lat": pick_up["lat"], "name": "Start"},
+#     {"lon": drop_off["lon"], "lat": drop_off["lat"], "name": drop_off["trash_type"]},
+# ])
+#
+
+        all_routes = []
+        all_paths = []
+        all_points = []
+
+        all_points.append({
+                "lon": pick_up["lon"],
+                "lat": pick_up["lat"],
+                "name": "Start"
+            })
+
+        for drop_off in drop_off_list:
+            # Calcul de route
+            route = get_route(all_points[-1], drop_off, client)
+            coords = route["features"][0]["geometry"]["coordinates"]
+
+            # Stockage du chemin
+            all_paths.append({"trash_type": drop_off["trash_type"], "path": coords})
+
+            # Stockage des points (départ + arrivée)
+
+            all_points.append({
+                "lon": drop_off["lon"],
+                "lat": drop_off["lat"],
+                "name": drop_off["trash_type"],
+                "distance":drop_off["distance"]
+            })
+
+        # DataFrames finaux
+        df_path = pd.DataFrame(all_paths)
+        df_points = pd.DataFrame(all_points)
                 # Layer : points
         point_layer = pdk.Layer(
             "ScatterplotLayer",
