@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image
 from dummy_function import dummy_predict, dummy_get_drop_off
-from dummy_function import DUMMY_START_POINT
+from dummy_function import DUMMY_START_POINT,DUMMY_PREDICT_RESULT,DUMMY_PROBABILITY_THRESHOLD
 import pydeck as pdk
 import pandas as pd
 import requests
@@ -14,7 +14,8 @@ from geopy.geocoders import Nominatim
 st.title("Trash-optimizer Front")
 
 st.write("### Where do you want to pick it from ?")
-address = st.text_input("Enter your adress :")
+address = st.text_input("Enter your adress :",
+    value="Nantes")
 if address:
     geolocator = Nominatim(user_agent="streamlit_app")
     try:
@@ -26,6 +27,15 @@ if address:
             st.error("Adresse introuvable. Vérifiez l'orthographe.")
     except Exception as e:
             st.error(f"Erreur lors du géocodage : {e}")
+road_mode = st.radio('Select a your drive mode', ('car','bike','foot'))
+if road_mode == 'car':
+    final_road_mode = "driving-car"
+elif road_mode == 'bike':
+    final_road_mode = "cycling-regular"
+elif road_mode == 'foot':
+    final_road_mode = "foot-walking"
+
+minimizer = st.radio('Do you want to minimize:', ('distance','duration'))
 # Step 1 — Let user choose how to provide the image
 choice = st.radio(
     "Choose how to provide an image:",
@@ -83,25 +93,13 @@ if img and user_input:
                       "lon":user_input[1],
                       "trash_type":"User Start Point",
                       "distance": 0}
-        drop_off_list = get_dropoff(client=client)
+        drop_off_list = get_dropoff(client=client,
+                                    trash_dict= DUMMY_PREDICT_RESULT,
+                                    starting_point = pick_up,
+                                    prob_threshold = DUMMY_PROBABILITY_THRESHOLD,
+                                    profile=final_road_mode,
+                                    minimizer=minimizer)
 
-#         #Starting with a single point
-#         drop_off = drop_off_list[0]
-
-#         route = get_route(pick_up,drop_off,client)
-#         coords = route["features"][0]["geometry"]["coordinates"]
-
-#                 # Conversion des coords en DataFrame
-#         df_path = pd.DataFrame({
-#             "path": [coords]
-#         })
-
-#         # Points de début/fin pour afficher des marqueurs
-#         df_points = pd.DataFrame([
-#     {"lon": pick_up["lon"], "lat": pick_up["lat"], "name": "Start"},
-#     {"lon": drop_off["lon"], "lat": drop_off["lat"], "name": drop_off["trash_type"]},
-# ])
-#
 
         all_routes = []
         all_paths = []
@@ -110,7 +108,9 @@ if img and user_input:
         all_points.append({
                 "lon": pick_up["lon"],
                 "lat": pick_up["lat"],
-                "name": "Start"
+                "name": "Start",
+                "distance":0,
+                "unit":" "
             })
 
         for drop_off in drop_off_list:
@@ -127,7 +127,8 @@ if img and user_input:
                 "lon": drop_off["lon"],
                 "lat": drop_off["lat"],
                 "name": drop_off["trash_type"],
-                "distance":drop_off["distance"]
+                "distance":drop_off["distance"],
+                "unit":drop_off["unit"]
             })
 
         # DataFrames finaux
@@ -139,7 +140,7 @@ if img and user_input:
             df_points,
             get_position='[lon, lat]',
             get_color='[200, 30, 0]',
-            get_radius=40,
+            get_radius=20,
         )
         # Text Layer pour les libellés sur les points
         text_layer = pdk.Layer(
@@ -148,9 +149,9 @@ if img and user_input:
         pickable=True,
         get_position='[lon, lat]',
         get_text="name",
-        get_color=[0, 0, 0],
-        get_size=16,
-        get_alignment_baseline="'bottom'",
+        get_color=[255, 255, 0],  # JAUNE 🔥
+        get_size=20,
+        get_alignment_baseline="'bottom'"
     )
         # Layer : la route (pas une ligne droite !)
         route_layer = pdk.Layer(
@@ -177,4 +178,4 @@ if img and user_input:
 
 
         st.subheader("Distances")
-        st.dataframe(df_points[["name", "distance"]])
+        st.dataframe(df_points[["name", "distance","unit"]])
