@@ -1,0 +1,7 @@
+# Training / Transfer Learning dependencies
+torch
+torchvision
+
+# Data processing
+numpy
+matplotlib
