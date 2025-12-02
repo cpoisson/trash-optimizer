@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader, Dataset
 from pathlib import Path
 import time
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Fine-tuning will based on https://www.kaggle.com/datasets/joebeachcapital/realwaste dataset
@@ -17,9 +18,9 @@ from dotenv import load_dotenv
 # "Miscellaneous Trash", "Paper", "Plastic",
 # "Textile Trash", "Vegetation"
 
-# Get ROOT_DIR from environment variable DATASET_ROOT_DIR
+# Get DATASET_ROOT_DIR from environment variable DATASET_ROOT_DIR
 load_dotenv()  # Load environment variables from .env file if present
-ROOT_DIR = os.getenv('DATASET_ROOT_DIR')
+DATASET_ROOT_DIR = os.getenv('DATASET_ROOT_DIR')
 RESULTS_DIR = os.getenv('RESULTS_ROOT_DIR')
 
 # The dataset is not organized into train/val/test splits, so we will create our own splits.
@@ -101,7 +102,7 @@ def get_data_loaders(root_dir, batch_size=32, test_split=0.2):
     return train_loader, val_loader
 
 
-def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30, learning_rate=0.0001):
+def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30, learning_rate=0.0001, output_dir='.'):
     '''Fine-tune EfficientNet on the custom dataset. Train history is returned for further analysis if needed.'''
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -175,7 +176,7 @@ def fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=30,
         # Save best model only
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
-            save_path = 'best_efficientnet_model.pth'
+            save_path = os.path.join(output_dir, 'best_model.pth')
             save_model(model, path=save_path)
             print(f'New best model saved with validation accuracy: {val_accuracy:.4f}')
 
@@ -207,8 +208,8 @@ def save_history(history, path='training_history.txt'):
 
 if __name__ == '__main__':
 
-    print("Loading dataset... at ", ROOT_DIR)
-    dataset = RealWasteDataset(ROOT_DIR)
+    print("Loading dataset... at ", DATASET_ROOT_DIR)
+    dataset = RealWasteDataset(DATASET_ROOT_DIR)
 
     print("Classes: ", dataset.get_classes())
     print("Class to Index Mapping: ", dataset.get_class_to_idx())
@@ -216,9 +217,19 @@ if __name__ == '__main__':
 
     num_classes = dataset.get_class_num()
 
-    train_loader, val_loader = get_data_loaders(ROOT_DIR, batch_size=32, test_split=0.2)
-    fine_tuned_model, history = fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=50, learning_rate=0.0001)
+    # Create timestamped output directory
+    timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    model_name = "efficientnet_b0"
+    dataset_name = "realwaste"
+    if RESULTS_DIR is None:
+        raise ValueError("RESULTS_ROOT_DIR environment variable is not set")
+    output_dir = os.path.join(RESULTS_DIR, f"{timestamp}_{model_name}_{dataset_name}")
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Output directory: {output_dir}")
 
-    save_model(fine_tuned_model, path='fine_tuned_efficientnet.pth')
-    save_class_mapping(dataset.get_class_to_idx(), path='class_mapping.txt')
-    save_history(history, path='training_history.txt')
+    train_loader, val_loader = get_data_loaders(DATASET_ROOT_DIR, batch_size=32, test_split=0.2)
+    fine_tuned_model, history = fine_tune_efficientnet(num_classes, train_loader, val_loader, num_epochs=50, learning_rate=0.0001, output_dir=output_dir)
+
+    save_model(fine_tuned_model, path=os.path.join(output_dir, 'final_model.pth'))
+    save_class_mapping(dataset.get_class_to_idx(), path=os.path.join(output_dir, 'class_mapping.txt'))
+    save_history(history, path=os.path.join(output_dir, 'training_history.txt'))
