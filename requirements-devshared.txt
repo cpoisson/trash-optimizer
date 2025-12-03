@@ -1,0 +1,15 @@
+
+# Front end for development and shared use
+streamlit
+
+# ML Libraries
+torch
+torchvision
+
+# Backend
+fastapi
+uvicorn
+requests
+
+# dev tools
+python-dotenv
