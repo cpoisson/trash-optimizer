@@ -140,8 +140,8 @@ if img and user_input:
                 "lon": drop_off["lon"],
                 "lat": drop_off["lat"],
                 "name": drop_off["trash_type"],
-                "distance":drop_off["distance"],
-                "unit":drop_off["unit"]
+                "distance_m":drop_off["distance_m"],
+                "duration_s":drop_off["duration_s"]
             })
 
         # DataFrames finaux
@@ -191,4 +191,4 @@ if img and user_input:
 
 
         st.subheader("Distances")
-        st.dataframe(df_points[["name", "distance","unit"]])
+        st.dataframe(df_points[["name", "distance_m","duration_s"]])

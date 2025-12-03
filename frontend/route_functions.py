@@ -27,6 +27,34 @@ def get_route(pick_up,drop_off,client, profile='driving-car'):
 
     return route
 
+def get_route_matrix(df, starting_point, client, profile="driving-car"):
+    # 1) Source = point de départ
+    src_coord = [float(starting_point["lon"]), float(starting_point["lat"])]
+
+    # 2) Destinations = liste de listes Python pures
+    dest_coords = df.apply(
+        lambda row: [float(row["Longitude"]), float(row["Latitude"])],
+        axis=1
+    ).tolist()  # ← très important : liste Python, pas Series
+
+    # 3) Locations = source + destinations
+    locations = [src_coord] + dest_coords
+
+    # 4) Appel matrix ORS — SANS "format="
+    matrix = client.distance_matrix(
+        locations=locations,
+        profile=profile,
+        metrics=["distance", "duration"],
+        sources=[0],                                  # index du point source
+        destinations=list(range(1, len(locations)))  # index des destinations
+    )
+
+    # 3) Add to DF
+    df = df.copy()
+    df["distance_m"] = matrix["distances"][0]
+    df["duration_s"] = matrix["durations"][0]
+    return df
+
 def get_dropoff(
     client,
     trash_dict,
@@ -36,6 +64,7 @@ def get_dropoff(
     minimizer="distance",
     keep_top_k=100
 ):
+    #Get all Trash Class that are "worth" exploring based on the proba threshold
     keys_above_threshold = [
     key
     for d in trash_dict
@@ -43,44 +72,43 @@ def get_dropoff(
     if value > prob_threshold
 ]
     dfs = []
+    #Loop to keep the closest point while all trash classes have not yet been defined
     while len(keys_above_threshold) > 0:
-        df_geoloc = get_loc(list_trash= keys_above_threshold)
-
-        df_geoloc["route"] = None
-
-    # Boucle sur les lignes
-        for idx, row in df_geoloc.iterrows():
-            df_geoloc.at[idx, "route"] = get_route(
-                pick_up=starting_point,
-                drop_off={"lat": row["Latitude"], "lon": row["Longitude"]},
-                client=client,
-                profile=profile
-            )
-            time.sleep(0.5)
-
-        if minimizer == 'distance':
-            df_geoloc["distance"] = df_geoloc["route"].apply(
-            lambda route: route["features"][0]["properties"]["summary"]["distance"]
+        df_geoloc = get_loc(list_trash= keys_above_threshold).copy()
+        df_geoloc["manhattan"] = df_geoloc.apply(
+            lambda row: manhattan_distance(
+                starting_point["lat"], starting_point["lon"],
+                row["Latitude"], row["Longitude"]
+            ),
+            axis=1
         )
-            df_geoloc['unit'] = 'meter'
-        elif minimizer == 'duration':
-            df_geoloc["distance"] = df_geoloc["route"].apply(
-        lambda route: route["features"][0]["properties"]["summary"]["duration"]
-    )
-            df_geoloc['unit'] = 'second'
+    #Only keep 100 points close to the last point to check based on manhattan distance to avoid API overkill
+        df_geoloc = (
+            df_geoloc
+            .groupby("Trash_class", group_keys=False)
+            .apply(lambda g: g.nsmallest(keep_top_k, "manhattan"))
+        )
 
-        idx = df_geoloc["distance"].idxmin()
+        df_geoloc = get_route_matrix(df_geoloc, starting_point, client, profile)
+        if minimizer == "distance":
+            idx = df_geoloc["distance_m"].idxmin()
+        else:
+            idx = df_geoloc["duration_s"].idxmin()
         df_min_per_type = df_geoloc.loc[[idx]].reset_index(drop=True)
         dfs.append(df_min_per_type)
         class_found = df_geoloc.loc[idx, "Trash_class"]
         keys_above_threshold.remove(class_found)
+        starting_point ={"lat": df_min_per_type["Latitude"],
+                      "lon":df_min_per_type["Longitude"],
+                      "trash_type":"User Start Point",
+                      "distance": 0}
 
         print(df_geoloc["Trash_class"].unique())
     if dfs:
         # Concatène tous les DataFrames et supprime les doublons
-        cols_to_check = ["Trash_class", "Latitude", "Longitude", "distance", "unit"]  # les colonnes sûres
+        cols_to_check = ["Trash_class", "Latitude", "Longitude", "distance_m", "duration_s"]  # les colonnes sûres
         result_df = pd.concat(dfs, ignore_index=True).drop_duplicates(subset=cols_to_check)
         return [
-    {"trash_type": row["Trash_class"], "lat": row["Latitude"], "lon": row["Longitude"], "distance": row["distance"], "unit": row["unit"]}
+    {"trash_type": row["Trash_class"], "lat": row["Latitude"], "lon": row["Longitude"], "distance_m": row["distance_m"], "duration_s": row["duration_s"]}
     for _, row in result_df.iterrows()
 ]
