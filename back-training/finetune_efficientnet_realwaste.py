@@ -12,6 +12,9 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 # Fine-tuning will based on https://www.kaggle.com/datasets/joebeachcapital/realwaste dataset
 # Classifying images into the following waste categories:
@@ -250,6 +253,38 @@ def plot_training_curves(history, path='training_curves.png'):
     plt.close()
     print(f'Training curves saved to {path}')
 
+def generate_confusion_matrix(model, val_loader, class_names, path='confusion_matrix.png'):
+    '''Generate and save a confusion matrix for the validation set'''
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    model = model.to(device)
+    model.eval()
+
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for inputs, labels in val_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs, 1)
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    cm = confusion_matrix(all_labels, all_preds)
+
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names)
+    plt.xlabel('Predicted', fontsize=12)
+    plt.ylabel('True', fontsize=12)
+    plt.title('Confusion Matrix', fontsize=14, fontweight='bold')
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+    plt.tight_layout()
+    plt.savefig(path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f'Confusion matrix saved to {path}')
+
 if __name__ == '__main__':
 
     if DATASET_ROOT_DIR is None:
@@ -282,3 +317,4 @@ if __name__ == '__main__':
     save_class_mapping(dataset.get_class_to_idx(), path=os.path.join(output_dir, 'class_mapping.txt'))
     save_history(history, path=os.path.join(output_dir, 'training_history.txt'))
     plot_training_curves(history, path=os.path.join(output_dir, 'training_curves.png'))
+    generate_confusion_matrix(fine_tuned_model, val_loader, dataset.get_classes(), path=os.path.join(output_dir, 'confusion_matrix.png'))

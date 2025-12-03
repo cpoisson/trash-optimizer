@@ -5,3 +5,5 @@ torchvision
 # Data processing
 numpy
 matplotlib
+scikit-learn
+seaborn
