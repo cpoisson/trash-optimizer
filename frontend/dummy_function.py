@@ -1,8 +1,9 @@
 import pandas as pd
-DUMMY_PREDICT_RESULT = [{
-    'Food Organics':0.7},
-    {'Glass':0.5},
-    {'Metal':0.02}
+
+DUMMY_PREDICT_RESULT = [
+    {"class": "Food Organics", "confidence": 0.7},
+    {"class": "Glass", "confidence": 0.5},
+    {"class": "Metal", "confidence": 0.02}
 ]
 
 DUMMY_DROP_OFF = {"lat": 47.2138, "lon": -1.5487}

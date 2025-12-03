@@ -106,8 +106,8 @@ if img and user_input:
                       "lon":user_input[1],
                       "trash_type":"User Start Point",
                       "distance": 0}
-        drop_off_list = get_dropoff(client=road_client,
-                                    trash_dict= DUMMY_PREDICT_RESULT,
+        drop_off_list = get_dropoff(road_client=road_client,
+                                    result_list= result_list,
                                     starting_point = pick_up,
                                     prob_threshold = DUMMY_PROBABILITY_THRESHOLD,
                                     profile=final_road_mode,
