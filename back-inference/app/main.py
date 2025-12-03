@@ -6,6 +6,8 @@ from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 from PIL import Image
 import io
 from typing import List, Dict
+from dotenv import load_dotenv
+import os
 
 app = FastAPI(title="Inference Backend", version="1.0.0")
 
@@ -25,6 +27,20 @@ categories = weights.meta["categories"]
 def read_root():
     return {"message": "Inference Backend API", "status": "running"}
 
+@app.get("/model-info")
+def model_info():
+    """
+    Get information about the loaded model.
+    """
+    try:
+        info = {
+            "model_name": "EfficientNet_B0",
+            "num_classes": len(categories),
+            "pretrained_on": "ImageNet1K",
+        }
+        return JSONResponse(content=info)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve model info: {str(e)}")
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)) -> List[Dict]:
