@@ -25,3 +25,5 @@ ENV/
 *.swp
 *.swo
 *~
+*.csv
+*.xlsx
