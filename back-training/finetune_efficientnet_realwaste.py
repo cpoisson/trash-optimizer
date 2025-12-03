@@ -40,6 +40,10 @@ RESULTS_ROOT_DIR = os.getenv('RESULTS_ROOT_DIR')
 # ├── Textile Trash
 # └── Vegetation
 
+def get_device():
+    '''Get the available device (CUDA, MPS, or CPU) for PyTorch operations'''
+    return torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+
 class RealWasteDataset(Dataset):
     '''Custom Dataset for Real Waste Images'''
     def __init__(self, root_dir, transform=None):
@@ -112,7 +116,7 @@ def fine_tune_efficientnet(
     output_dir='.'
 ):
     '''Fine-tune EfficientNet on the custom dataset. Train history is returned for further analysis if needed.'''
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    device = get_device()
     print(f"Using device: {device}")
 
     model = models.efficientnet_b0(weights='IMAGENET1K_V1')
@@ -254,8 +258,15 @@ def plot_training_curves(history, path='training_curves.png'):
     print(f'Training curves saved to {path}')
 
 def generate_confusion_matrix(model, val_loader, class_names, path='confusion_matrix.png'):
-    '''Generate and save a confusion matrix for the validation set'''
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    '''Generate and save a confusion matrix for the validation set.
+
+    Args:
+        model: The trained PyTorch model to evaluate.
+        val_loader: DataLoader for the validation dataset.
+        class_names: List of class names for labeling the matrix axes.
+        path: File path to save the confusion matrix image. Defaults to 'confusion_matrix.png'.
+    '''
+    device = get_device()
     model = model.to(device)
     model.eval()
 
