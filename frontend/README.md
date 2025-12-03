@@ -4,7 +4,7 @@ This is the Streamlit frontend for the Trash Optimizer application. It provides 
 
 ## 3rd Party Services
 This application relies on the following external services:
-- **Geolocation Service**: open route service for mapping and geolocation functionalities. `https://openrouteservice.org/`
+- **Geolocation Service**: OpenRouteService for mapping and geolocation functionalities. `https://openrouteservice.org/`
 - **Inference Service**: A custom backend service for trash bin level prediction. Make sure to have it running and accessible.
 
 ## Setup
