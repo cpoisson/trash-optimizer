@@ -17,7 +17,7 @@ load_dotenv()
 GEO_SERVICE_API_KEY = os.getenv("GEO_SERVICE_API_KEY")
 INFERENCE_SERVICE_URL = os.getenv("INFERENCE_SERVICE_URL")
 
-# Raise value errors if environment variables are not set
+# Raise ValueErrors if environment variables are not set
 if not GEO_SERVICE_API_KEY:
     raise ValueError("GEO_SERVICE_API_KEY is not set in environment variables.")
 if not INFERENCE_SERVICE_URL:
