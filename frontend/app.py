@@ -101,12 +101,12 @@ if img and user_input:
                     st.subheader(f"Prediction {i+1}")
                     st.write(item)
 
-        client = openrouteservice.Client(key=GEO_SERVICE_API_KEY)
+        road_client = openrouteservice.Client(key=GEO_SERVICE_API_KEY)
         pick_up = {"lat": user_input[0],
                       "lon":user_input[1],
                       "trash_type":"User Start Point",
                       "distance": 0}
-        drop_off_list = get_dropoff(client=client,
+        drop_off_list = get_dropoff(client=road_client,
                                     trash_dict= DUMMY_PREDICT_RESULT,
                                     starting_point = pick_up,
                                     prob_threshold = DUMMY_PROBABILITY_THRESHOLD,
@@ -128,7 +128,7 @@ if img and user_input:
 
         for drop_off in drop_off_list:
             # Calcul de route
-            route = get_route(all_points[-1], drop_off, client)
+            route = get_route(all_points[-1], drop_off, road_client)
             coords = route["features"][0]["geometry"]["coordinates"]
 
             # Stockage du chemin
@@ -140,8 +140,8 @@ if img and user_input:
                 "lon": drop_off["lon"],
                 "lat": drop_off["lat"],
                 "name": drop_off["trash_type"],
-                "distance":drop_off["distance"],
-                "unit":drop_off["unit"]
+                "distance_m":drop_off["distance_m"],
+                "duration_s":drop_off["duration_s"]
             })
 
         # DataFrames finaux
@@ -191,4 +191,4 @@ if img and user_input:
 
 
         st.subheader("Distances")
-        st.dataframe(df_points[["name", "distance","unit"]])
+        st.dataframe(df_points[["name", "distance_m","duration_s"]])

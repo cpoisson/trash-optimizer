@@ -1,5 +1,9 @@
-streamlit
-pydeck
+openrouteservice
 pandas
+streamlit
+Pillow
+pydeck
 requests
+geopy
 python-dotenv
+google-cloud-bigquery
