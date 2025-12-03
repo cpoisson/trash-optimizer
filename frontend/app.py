@@ -7,10 +7,23 @@ import pandas as pd
 import requests
 from openrouteservice import convert
 import openrouteservice
-from key import GEO_KEY
 from route_functions import get_route,get_dropoff
 from geopy.geocoders import Nominatim
+from dotenv import load_dotenv
+import os
 
+# Load environment variables
+load_dotenv()
+GEO_SERVICE_API_KEY = os.getenv("GEO_SERVICE_API_KEY")
+INFERENCE_SERVICE_URL = os.getenv("INFERENCE_SERVICE_URL")
+
+# Raise value errors if environment variables are not set
+if not GEO_SERVICE_API_KEY:
+    raise ValueError("GEO_SERVICE_API_KEY is not set in environment variables.")
+if not INFERENCE_SERVICE_URL:
+    raise ValueError("INFERENCE_SERVICE_URL is not set in environment variables.")
+
+# Streamlit app
 st.title("Trash-optimizer Front")
 
 st.write("### Where do you want to pick it from ?")
@@ -76,7 +89,7 @@ if img and user_input:
         elif camera_image:
             files = {"file": camera_image.getvalue()}  # envoie l'image brute
         # Si ton API attend plutôt un form-data multipart
-        response = requests.post("http://localhost:8000/predict", files=files)
+        response = requests.post(f"{INFERENCE_SERVICE_URL}/predict", files=files)
         result_list = response.json()
 
         # Calcul de la prédiction
@@ -88,7 +101,7 @@ if img and user_input:
                     st.subheader(f"Prediction {i+1}")
                     st.write(item)
 
-        client = openrouteservice.Client(key=GEO_KEY)
+        client = openrouteservice.Client(key=GEO_SERVICE_API_KEY)
         pick_up = {"lat": user_input[0],
                       "lon":user_input[1],
                       "trash_type":"User Start Point",

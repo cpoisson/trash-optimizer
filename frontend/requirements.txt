@@ -2,3 +2,4 @@ streamlit
 pydeck
 pandas
 requests
+python-dotenv
