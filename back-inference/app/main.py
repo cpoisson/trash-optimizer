@@ -8,19 +8,66 @@ import io
 from typing import List, Dict
 from dotenv import load_dotenv
 import os
+import huggingface_hub as hf
+
+# Load environment variables
+load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN")
+HF_MODEL_REPO_ID = os.getenv("HF_MODEL_REPO_ID")
+HF_MODEL_FILENAME = os.getenv("HF_MODEL_FILENAME")
+HF_MODEL_CATEGORIES_FILENAME = os.getenv("HF_MODEL_CATEGORIES_FILENAME")
 
 app = FastAPI(title="Inference Backend", version="1.0.0")
 
-# Load model and weights
-weights = EfficientNet_B0_Weights.IMAGENET1K_V1
-model = efficientnet_b0(weights=weights)
-model.eval()
+if HF_TOKEN and HF_MODEL_REPO_ID:
+    # Load model from Hugging Face Hub
+    print("Loading model from Hugging Face Hub...")
+    hf.login(token=HF_TOKEN)
 
-# Get preprocessing transforms
-preprocess = weights.transforms()
+    # Download model file
+    model_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=HF_MODEL_FILENAME)
 
-# Get class labels
-categories = weights.meta["categories"]
+    # Download and load class mapping first to get num_classes
+    class_mapping_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=HF_MODEL_CATEGORIES_FILENAME)
+
+    # Load class labels
+    with open(class_mapping_path, "r") as f:
+        lines = f.readlines()
+        class_to_idx = {}
+        for line in lines:
+            class_name, idx = line.strip().split(":")
+            class_to_idx[class_name] = int(idx)
+
+    categories = list(class_to_idx.keys())
+    num_classes = len(categories)
+
+    # Initialize model with correct number of classes
+    model = efficientnet_b0(weights=None)
+    model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
+
+    # Load the trained weights
+    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+    model.eval()
+
+    # Define preprocessing transforms
+    preprocess = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+
+else:
+    # Load default model and weights
+    print("Loading default EfficientNet_B0 model...")
+    weights = EfficientNet_B0_Weights.IMAGENET1K_V1
+    model = efficientnet_b0(weights=weights)
+    model.eval()
+    # Get preprocessing transforms
+    preprocess = weights.transforms()
+    # Get class labels
+    categories = weights.meta["categories"]
 
 
 @app.get("/")
