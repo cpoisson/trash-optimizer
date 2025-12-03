@@ -42,14 +42,16 @@ def get_dropoff(client,trash_dict= DUMMY_PREDICT_RESULT,starting_point = DUMMY_S
         df_geoloc["distance"] = df_geoloc["route"].apply(
         lambda route: route["features"][0]["properties"]["summary"]["distance"]
     )
+        df_geoloc['unit'] = 'meter'
     elif minimizer == 'duration':
         df_geoloc["distance"] = df_geoloc["route"].apply(
     lambda route: route["features"][0]["properties"]["summary"]["duration"]
 )
+        df_geoloc['unit'] = 'second'
 
     idx = df_geoloc.groupby("trash_type")["distance"].idxmin()
     df_min_per_type = df_geoloc.loc[idx].reset_index(drop=True)
     return [
-    {"trash_type": row["trash_type"], "lat": row["lat"], "lon": row["lon"], "distance": row["distance"]}
+    {"trash_type": row["trash_type"], "lat": row["lat"], "lon": row["lon"], "distance": row["distance"], "unit": row["unit"]}
     for _, row in df_min_per_type.iterrows()
 ]
