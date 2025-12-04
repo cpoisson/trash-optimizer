@@ -6,10 +6,10 @@ DUMMY_PREDICT_RESULT = [
     {"class": "Paper", "confidence": 0.2},
     {"class": "Vegetation", "confidence": 0.2},
     {"class": "Textile Trash", "confidence": 0.7},
-    # {"class": "Miscellaneous Trash", "confidence": 0.5},
     {"class": "Glass", "confidence": 0.7},
     {"class": "Metal", "confidence": 0.5},
     {"class": "Plastic", "confidence": 0.2},
+    # {"class": "Miscellaneous Trash", "confidence": 0.5},
 ]
 
 

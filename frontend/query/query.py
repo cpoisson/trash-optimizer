@@ -26,8 +26,10 @@ def get_loc(list_trash = None):
             Longitude,
             Latitude,
             '{category}' AS Trash_class
-        FROM `{GCP_PROJECT}.{GCP_DATASET}.trash_collection_points`
+        FROM `{GCP_PROJECT}.{GCP_DATASET}.trash_collection_points_with_miscellaneous`
         WHERE {category_mapping[category]}
+        AND Longitude IS NOT NULL
+        AND Latitude IS NOT NULL
         """
 
         df = bigquery_client.query(query).to_dataframe()

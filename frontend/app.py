@@ -121,6 +121,11 @@ if img and user_input:
                     st.subheader(f"Prediction {i+1}")
                     st.write(item)
 
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        def update_progress(fraction):
+            progress_bar.progress(fraction)
+            status_text.write(f"Processing… {int(fraction*100)}%")
         road_client = openrouteservice.Client(key=GEO_SERVICE_API_KEY)
         pick_up = {"lat": user_input[0],
                       "lon":user_input[1],
@@ -131,7 +136,9 @@ if img and user_input:
                                     starting_point = pick_up,
                                     prob_threshold = DUMMY_PROBABILITY_THRESHOLD,
                                     profile=final_road_mode,
-                                    minimizer=minimizer)
+                                    minimizer=minimizer,
+                                    progress_callback=update_progress
+                                    )
 
 
         all_routes = []
@@ -142,6 +149,7 @@ if img and user_input:
                 "lon": pick_up["lon"],
                 "lat": pick_up["lat"],
                 "name": "Start",
+                "trash_type": "Start",
                 "distance":0,
                 "unit":" "
             })
@@ -159,7 +167,7 @@ if img and user_input:
             all_points.append({
                 "lon": drop_off["lon"],
                 "lat": drop_off["lat"],
-                "name": drop_off["trash_type"],
+                "trash_type": drop_off["trash_type"],
                 "distance_m":drop_off["distance_m"],
                 "duration_s":drop_off["duration_s"]
             })
@@ -181,7 +189,7 @@ if img and user_input:
         df_points,
         pickable=True,
         get_position='[lon, lat]',
-        get_text="name",
+        get_text="trash_type",
         get_color=[255, 255, 0],  # JAUNE 🔥
         get_size=20,
         get_alignment_baseline="'bottom'"
@@ -211,4 +219,16 @@ if img and user_input:
 
 
         st.subheader("Distances")
-        st.dataframe(df_points[["name", "distance_m","duration_s"]])
+        # Génération du texte pour chaque ligne
+        for step_index, (idx, row) in enumerate(df_points.iloc[1:].iterrows(), start=1):
+            minutes = row["duration_s"] / 60
+            kilometers = row["distance_m"] / 1000
+
+            step_text = (
+                f"### Step {step_index}\n"
+                f"**Destination:** Drop off your **{row['trash_type']}** waste\n"
+                f"**Estimated time:** {minutes:.1f} minutes\n"
+                f"**Distance:** {kilometers:.2f} km\n\n"
+            )
+
+            st.markdown(step_text)

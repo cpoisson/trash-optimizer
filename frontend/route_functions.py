@@ -69,7 +69,8 @@ def get_dropoff(
     prob_threshold=0.15,
     profile="driving-car",
     minimizer="distance",
-    keep_top_k=100
+    keep_top_k=100,
+    progress_callback=None
 ):
     #Get all Trash Class that are "worth" exploring based on the proba threshold
     keys_above_threshold = [
@@ -80,6 +81,8 @@ def get_dropoff(
     if not result_list:
         return []
     dfs = []
+    i = 0
+    total = len(keys_above_threshold)
     #Loop to keep the closest point while all trash classes have not yet been defined
     while len(keys_above_threshold) > 0:
         df_geoloc = get_loc(list_trash= keys_above_threshold).copy()
@@ -110,7 +113,9 @@ def get_dropoff(
                       "lon":df_min_per_type["Longitude"],
                       "trash_type":"User Start Point",
                       "distance": 0}
-
+        if progress_callback:
+            progress_callback((i + 1) / total)
+            i = i+1
         print(df_geoloc["Trash_class"].unique())
     if dfs:
         # Concatène tous les DataFrames et supprime les doublons
