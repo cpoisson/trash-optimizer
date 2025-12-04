@@ -7,5 +7,5 @@ category_mapping = {
     "Plastic": "Is_Plastic_enabled = 1",
     "Textile Trash": "Is_Textile_enabled=1",
     "Vegetation":"Is_Vegetation_enabled =1",
-    "Miscellanous Trash":"Is_Miscellanous_Trash_enabled =1"
+    "Miscellaneous Trash":"Is_miscellaneous_trash_enabled =1"
 }

@@ -85,6 +85,7 @@ def get_dropoff(
     total = len(keys_above_threshold)
     #Loop to keep the closest point while all trash classes have not yet been defined
     while len(keys_above_threshold) > 0:
+        print(f" where are checking the following classes{keys_above_threshold}")
         df_geoloc = get_loc(list_trash= keys_above_threshold).copy()
         df_geoloc["manhattan"] = df_geoloc.apply(
             lambda row: manhattan_distance(
@@ -116,7 +117,6 @@ def get_dropoff(
         if progress_callback:
             progress_callback((i + 1) / total)
             i = i+1
-        print(df_geoloc["Trash_class"].unique())
     if dfs:
         # Concatène tous les DataFrames et supprime les doublons
         cols_to_check = ["Trash_class", "Latitude", "Longitude", "distance_m", "duration_s"]  # les colonnes sûres
