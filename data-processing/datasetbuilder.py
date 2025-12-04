@@ -7,10 +7,10 @@ from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png"}
 
 def load_mapping(csv_path: Path):
-    """Lit le CSV (source_class,target_class) et retourne un dict."""
+    """Load CSV mapping file (source_class,target_class) and return as dictionary."""
     mapping = {}
-    with csv_path.open(encoding="utf-8") as f: #utf = type d'encodage
-        reader = csv.DictReader(f) #on crée un lecteur qui transforme chaque ligne en dictionnaire, les clés sont les noms des colonnes
+    with csv_path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)  # Creates a reader that transforms each row into a dictionary with column names as keys
         for row in reader:
             mapping[row["source_class"].strip()] = row["target_class"].strip()
     return mapping
@@ -27,7 +27,7 @@ def is_valid_image(path: Path) -> bool:
         return False
 
 def assemble_one_dataset(dataset_dir: Path, mapping: dict, output_dir: Path):
-    """Copie les images en les remappant vers les classes cibles."""
+    """Copy images while remapping them to target classes."""
     counts = {}
     ignored = []
 
@@ -50,7 +50,7 @@ def assemble_one_dataset(dataset_dir: Path, mapping: dict, output_dir: Path):
     return counts, ignored
 
 def assemble_all(root_processing: Path, root_processed: Path):
-    """Parcourt tous les datasets sous root_processing/datasets et assemble."""
+    """Iterate through all datasets under root_processing/datasets and assemble them."""
     all_counts = {}
     all_ignored = {}
     datasets_dir = root_processing / "datasets"
@@ -59,14 +59,13 @@ def assemble_all(root_processing: Path, root_processed: Path):
     for dataset_dir in sorted(p for p in datasets_dir.iterdir() if p.is_dir()):
         mapping_file = mappings_dir / f"{dataset_dir.name}.csv"
         if not mapping_file.exists():
-            # Fallback to lowercase naming to tolerate case mismatches between folders and CSVs.
-            # si ce fichier n’existe pas, essaie la variante en minuscules pour tolérer un écart de casse
+            # Fallback to lowercase naming to tolerate case mismatches between folders and CSVs
             fallback = mappings_dir / f"{dataset_dir.name.lower()}.csv"
 
             if fallback.exists():
                 mapping_file = fallback
         if not mapping_file.exists():
-            all_ignored[dataset_dir.name] = ["<no mapping file>"] #pas d'assemblage possible
+            all_ignored[dataset_dir.name] = ["<no mapping file>"]  # No assembly possible
             continue
         mapping = load_mapping(mapping_file)
         counts, ignored = assemble_one_dataset(dataset_dir, mapping, root_processed)
@@ -77,7 +76,7 @@ def assemble_all(root_processing: Path, root_processed: Path):
     return all_counts, all_ignored
 
 def list_class_images(root_processed: Path):
-    """Retourne un dict {classe_cible: [liste de chemins images]} depuis ROOT_PROCESSED."""
+    """Return a dictionary mapping target classes to lists of image paths from ROOT_PROCESSED."""
     class_to_images = {}
     for class_dir in sorted(p for p in root_processed.iterdir() if p.is_dir()):
         images = [
@@ -89,30 +88,31 @@ def list_class_images(root_processed: Path):
     return class_to_images
 
 def augment_image(src: Path, dest: Path, rng: random.Random):
-    """Crée une image augmentée (flip/rotation légère/jitter couleur) et la sauvegarde."""
+    """Create an augmented image (flip/slight rotation/color jitter) and save it."""
     with Image.open(src) as img:
         choice = rng.choice(["flip", "rot", "jitter"])
         if choice == "flip":
             aug = ImageOps.mirror(img)
         elif choice == "rot":
-            angle = rng.uniform(-12, 12)  # petite rotation
+            angle = rng.uniform(-12, 12)  # Small rotation
             aug = img.rotate(angle, resample=Image.BICUBIC, expand=True)
         else:
-            # jitter léger sur luminosité et contraste
+            # Light jitter on brightness and contrast
             bright = ImageEnhance.Brightness(img).enhance(rng.uniform(0.9, 1.1))
             aug = ImageEnhance.Contrast(bright).enhance(rng.uniform(0.9, 1.1))
 
-        fmt = img.format  # garde le format d'origine si connu
+        fmt = img.format  # Preserve original format if known
         aug.save(dest, format=fmt)
 
 def balance_dataset(root_processed: Path, output_balanced: Path, target: int | None = 1000, seed: int = 42):
     """
-    Rebalance les classes en sur-échantillonnant (avec augmentation) les classes minoritaires.
+    Rebalance classes by oversampling (with augmentation) minority classes.
 
-    - root_processed : dossier contenant les images déjà remappées par classe cible.
-    - output_balanced : dossier de sortie équilibré.
-    - target : nombre d'images par classe (par défaut 1000, sinon le minimum si None).
-    - seed : graine pour la sélection pseudo-aléatoire des images à augmenter.
+    Args:
+        root_processed: Directory containing images already remapped by target class.
+        output_balanced: Output directory for balanced dataset.
+        target: Number of images per class (default 1000, or minimum if None).
+        seed: Random seed for reproducible selection of images to augment.
     """
     rng = random.Random(seed)
     class_to_images = list_class_images(root_processed)
@@ -130,7 +130,7 @@ def balance_dataset(root_processed: Path, output_balanced: Path, target: int | N
         dest_dir = output_balanced / cls
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        # Si la classe a déjà assez d'images, on en prend "target" tirées aléatoirement (mais reproductible).
+        # If the class already has enough images, randomly select "target" images (reproducibly)
         selected = sorted(images)
         if len(selected) >= target:
             chosen = rng.sample(selected, target) if len(selected) > target else selected
@@ -139,7 +139,7 @@ def balance_dataset(root_processed: Path, output_balanced: Path, target: int | N
             output_counts[cls] = target
             continue
 
-        # Sinon, on copie tout puis on complète par augmentation simple jusqu'à atteindre "target".
+        # Otherwise, copy all existing images and fill the deficit with augmented images until reaching "target"
         for img_path in selected:
             shutil.copy2(img_path, dest_dir / img_path.name)
 
