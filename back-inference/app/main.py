@@ -74,6 +74,16 @@ else:
 def read_root():
     return {"message": "Inference Backend API", "status": "running"}
 
+@app.get("/categories")
+def get_categories():
+    """
+    Get the list of categories the model can predict.
+    """
+    try:
+        return JSONResponse(content={"categories": categories})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve categories: {str(e)}")
+
 @app.get("/model-info")
 def model_info():
     """
@@ -82,7 +92,7 @@ def model_info():
     try:
         info = {
             "model_name": "EfficientNet_B0",
-            "num_classes": len(categories),
+            "num_categories": len(categories),
             "pretrained_on": "ImageNet1K",
         }
         return JSONResponse(content=info)
