@@ -27,7 +27,8 @@ def get_route(pick_up,drop_off,client, profile='driving-car'):
 
     return route
 
-def get_route_matrix(df, starting_point, client, profile="driving-car"):
+
+def get_route_matrix(df, starting_point, road_client, profile="driving-car"):
     # 1) Source = point de départ
     src_coord = [float(starting_point["lon"]), float(starting_point["lat"])]
 
@@ -41,7 +42,7 @@ def get_route_matrix(df, starting_point, client, profile="driving-car"):
     locations = [src_coord] + dest_coords
 
     # 4) Appel matrix ORS — SANS "format="
-    matrix = client.distance_matrix(
+    matrix = road_client.distance_matrix(
         locations=locations,
         profile=profile,
         metrics=["distance", "duration"],
@@ -56,8 +57,8 @@ def get_route_matrix(df, starting_point, client, profile="driving-car"):
     return df
 
 def get_dropoff(
-    client,
-    trash_dict,
+    road_client,
+    result_list,
     starting_point,
     prob_threshold=0.15,
     profile="driving-car",
@@ -66,11 +67,12 @@ def get_dropoff(
 ):
     #Get all Trash Class that are "worth" exploring based on the proba threshold
     keys_above_threshold = [
-    key
-    for d in trash_dict
-    for key, value in d.items()
-    if value > prob_threshold
-]
+        item["class"]
+        for item in result_list
+        if item["confidence"] > prob_threshold
+    ]
+    if not result_list:
+        return []
     dfs = []
     #Loop to keep the closest point while all trash classes have not yet been defined
     while len(keys_above_threshold) > 0:
@@ -89,7 +91,7 @@ def get_dropoff(
             .apply(lambda g: g.nsmallest(keep_top_k, "manhattan"))
         )
 
-        df_geoloc = get_route_matrix(df_geoloc, starting_point, client, profile)
+        df_geoloc = get_route_matrix(df_geoloc, starting_point, road_client, profile)
         if minimizer == "distance":
             idx = df_geoloc["distance_m"].idxmin()
         else:
