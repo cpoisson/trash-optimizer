@@ -2,12 +2,13 @@
 
 # Targeted categories for waste classification
 [configuration]
-categories = ["plastic", "paper", "glass",  "cardboard", "metal", "organic", "other"]
+supported_extensions = [".jpg", ".jpeg", ".png"]
 root_data_dir = "~/Data/datasets"
 root_ouput_dir = "~/Data/datasets_processed"
 output_dataset_name = "trash_optimizer_dataset"
 output_max_per_category = 1000
 output_minimum_images_size_wh = [150, 150]
+ouput_categories = ["plastic", "paper", "glass",  "cardboard", "metal", "organic", "other"]
 
 # Dataset source configurations
 [[datasets]]
