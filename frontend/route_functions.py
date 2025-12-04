@@ -6,6 +6,7 @@ from dummy_function import dummy_get_loc
 from query.query import get_loc
 import time
 import pandas as pd
+import math
 
 def manhattan_distance(lat1, lon1, lat2, lon2):
     """Distance de Manhattan approximative en degrés (suffisant pour un pré-filtre)."""
@@ -33,10 +34,15 @@ def get_route_matrix(df, starting_point, road_client, profile="driving-car"):
     src_coord = [float(starting_point["lon"]), float(starting_point["lat"])]
 
     # 2) Destinations = liste de listes Python pures
-    dest_coords = df.apply(
-        lambda row: [float(row["Longitude"]), float(row["Latitude"])],
-        axis=1
-    ).tolist()  # ← très important : liste Python, pas Series
+    dest_coords = []
+
+    for idx, row in df.iterrows():
+        try:
+            lon = float(row["Longitude"])
+            lat = float(row["Latitude"])
+            dest_coords.append([lon, lat])
+        except (ValueError, TypeError) as e:
+            print(f"Ligne {idx} ignorée, coordonnées invalides : {row['Longitude']}, {row['Latitude']} ({e})")
 
     # 3) Locations = source + destinations
     locations = [src_coord] + dest_coords

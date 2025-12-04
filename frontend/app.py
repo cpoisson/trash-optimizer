@@ -109,10 +109,12 @@ if img and user_input:
         # Si ton API attend plutôt un form-data multipart
         response = requests.post(f"{INFERENCE_SERVICE_URL}/predict", files=files)
         result_list = response.json()
-
-        # Calcul de la prédiction
-        # result_dict = dummy_predict()
-
+        #Ajuste la liste de prédiction en fonction des choix de l'user:
+        if not recycling:
+            result_list =  [r for r in result_list if r.get("class") not in ["Metal", "Paper", "Cardboard"]]
+        if not misc:
+            result_list =  [r for r in result_list if r.get("class") not in ["Miscellanous Trash"]]
+        #To be added: ressourcerie
         # Mise à jour du conteneur avec le résultat
         status.success("Prediction done!")  # change le message
         for i, item in enumerate(result_list):
@@ -125,7 +127,7 @@ if img and user_input:
                       "trash_type":"User Start Point",
                       "distance": 0}
         drop_off_list = get_dropoff(road_client=road_client,
-                                    result_list= result_list,
+                                    result_list= DUMMY_PREDICT_RESULT,
                                     starting_point = pick_up,
                                     prob_threshold = DUMMY_PROBABILITY_THRESHOLD,
                                     profile=final_road_mode,
