@@ -6,9 +6,26 @@ input_root_dir = "~/Data/trash-optimizer/datasets"
 input_img_extensions = [".jpg", ".jpeg", ".png"]
 output_root_dir = "~/Data/datasets_processed"
 output_dataset_name = "trash_optimizer_dataset"
-output_max_per_category = 1000
+output_max_per_category = 500
 output_minimum_images_size_wh = [150, 150]
-output_categories = ["plastic", "paper", "glass",  "cardboard", "metal", "organic", "other"]
+output_categories = [
+  "battery",
+  "car_battery",
+  "cardboard",
+  "glass",
+  "light_bulb",
+  "metal",
+  "mirror",
+  "neon",
+  "organic",
+  "other",
+  "paper",
+  "pharmacy",
+  "plastic",
+  "printer_cartridge",
+  "tire",
+  "wood"
+]
 
 # Dataset source configurations
 [[configuration.datasets]]
@@ -35,33 +52,51 @@ repository = "alistairking/recyclable-and-household-waste-classificationt"
 citation = "https://www.kaggle.com/datasets/alistairking/recyclable-and-household-waste-classificationt"
 
 [configuration.datasets.input_output_categories]
-plastic_water_bottles = "plastic"
-plastic_soda_bottles = "plastic"
-plastic_detergent_bottles = "plastic"
-plastic_shopping_bags = "plastic"
-plastic_trash_bags = "plastic"
-plastic_food_containers = "plastic"
-disposable_plastic_cutlery = "plastic"
-plastic_straws = "plastic"
-plastic_cup_lids = "plastic"
-styrofoam_food_containers = "miscellaneous_trash"
-styrofoam_cups = "miscellaneous_trash"
-paper_cups = "paper"
-newspaper = "paper"
-office_paper = "paper"
-magazines = "paper"
-cardboard_boxes = "cardboard"
-cardboard_packaging = "cardboard"
-glass_beverage_bottles = "glass"
-glass_food_jars = "glass"
-glass_cosmetic_containers = "glass"
-aluminum_soda_cans = "metal"
-aluminum_food_cans = "metal"
-steel_food_cans = "metal"
-aerosol_cans = "metal"
-food_waste = "food_organics"
-eggshells = "food_organics"
-coffee_grounds = "food_organics"
-tea_bags = "food_organics"
-clothing = "textile_trash"
-shoes = "textile_trash"
+"plastic_water_bottles" = "plastic"
+"plastic_soda_bottles" = "plastic"
+"plastic_detergent_bottles" = "plastic"
+"plastic_shopping_bags" = "plastic"
+"plastic_trash_bags" = "plastic"
+"plastic_food_containers" = "plastic"
+"disposable_plastic_cutlery" = "plastic"
+"plastic_straws" = "plastic"
+"plastic_cup_lids" = "plastic"
+"styrofoam_food_containers" = "miscellaneous_trash"
+"styrofoam_cups" = "miscellaneous_trash"
+"paper_cups" = "paper"
+"newspaper" = "paper"
+"office_paper" = "paper"
+"magazines" = "paper"
+"cardboard_boxes" = "cardboard"
+"cardboard_packaging" = "cardboard"
+"glass_beverage_bottles" = "glass"
+"glass_food_jars" = "glass"
+"glass_cosmetic_containers" = "glass"
+"aluminum_soda_cans" = "metal"
+"aluminum_food_cans" = "metal"
+"steel_food_cans" = "metal"
+"aerosol_cans" = "metal"
+"food_waste" = "food_organics"
+"eggshells" = "food_organics"
+"coffee_grounds" = "food_organics"
+"tea_bags" = "food_organics"
+"clothing" = "textile_trash"
+"shoes" = "textile_trash"
+
+
+[[configuration.datasets]]
+folder_name = "customdataset"
+source = "custom"
+repository = "none"
+citation = "none"
+
+[configuration.datasets.input_output_categories]
+"battery" = "battery"
+"light_bulb" = "light_bulb"
+"neon" = "neon"
+"printer_cartridge" = "printer_cartridge"
+"wood" = "wood"
+"car_battery" = "car_battery"
+"mirror" = "mirror"
+"pharmacy" = "pharmacy"
+"tire" = "tire"
