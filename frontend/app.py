@@ -40,20 +40,38 @@ if address:
             st.error("Adresse introuvable. Vérifiez l'orthographe.")
     except Exception as e:
             st.error(f"Erreur lors du géocodage : {e}")
-road_mode = st.radio('Select a your drive mode', ('car','bike','foot'))
-if road_mode == 'car':
+
+
+col1, col2,col3  = st.columns(3)
+with col1:
+    minimizer = st.radio('Do you want to minimize:', ('duration','distance'), horizontal=True)
+# Step 1 — Let user choose how to provide the image
+with col2:
+    choice = st.radio(
+    "Choose how to provide an image:",
+    ("Upload a file", "Take a picture"),
+     horizontal=True)
+with col3:
+    road_mode = st.radio('Select a your drive mode', ('Car 🚗','Bike 🚴','Foot 👟'), horizontal=True)
+if road_mode == 'Car 🚗':
     final_road_mode = "driving-car"
-elif road_mode == 'bike':
+elif road_mode == 'Bike 🚴':
     final_road_mode = "cycling-regular"
-elif road_mode == 'foot':
+elif road_mode == 'Foot 👟':
     final_road_mode = "foot-walking"
 
-minimizer = st.radio('Do you want to minimize:', ('distance','duration'))
-# Step 1 — Let user choose how to provide the image
-choice = st.radio(
-    "Choose how to provide an image:",
-    ("Upload a file", "Take a picture")
-)
+col4,col5,col6 = st.columns(3)
+with col4:
+    misc = st.checkbox("Check here to throw miscellaneous trash 🗑 on the road")
+with col5:
+    recycling = st.checkbox("Check here to throw recycling trash ♻️ on the road")
+with col6:
+    ress = st.checkbox("Check here to add good-looking items to a ressourcerie on the road")
+
+with st.expander("Your selections"):
+    st.write(f"- Miscellaneous trash: {'On the road' if misc else 'At home'}")
+    st.write(f"- Recycling trash: {'On the road' if recycling else 'At home'}")
+    st.write(f"- Good-looking items to ressourcerie: {'Added to the road' if ress else 'Not added to the road'}")
 
 uploaded_file = None
 camera_image = None
@@ -91,16 +109,25 @@ if img and user_input:
         # Si ton API attend plutôt un form-data multipart
         response = requests.post(f"{INFERENCE_SERVICE_URL}/predict", files=files)
         result_list = response.json()
-
-        # Calcul de la prédiction
-        # result_dict = dummy_predict()
-
+        #Ajuste la liste de prédiction en fonction des choix de l'user:
+        print(f"from predict:{result_list= }")
+        if not recycling:
+            result_list =  [r for r in result_list if r.get("class") not in ["Metal", "Paper", "Cardboard"]]
+        if not misc:
+            result_list =  [r for r in result_list if r.get("class") not in ["Miscellanous Trash"]]
+        print(f"after user input:{result_list= }")
+        #To be added: ressourcerie
         # Mise à jour du conteneur avec le résultat
         status.success("Prediction done!")  # change le message
         for i, item in enumerate(result_list):
                     st.subheader(f"Prediction {i+1}")
                     st.write(item)
 
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        def update_progress(fraction):
+            progress_bar.progress(fraction)
+            status_text.write(f"Processing… {int(fraction*100)}%")
         road_client = openrouteservice.Client(key=GEO_SERVICE_API_KEY)
         pick_up = {"lat": user_input[0],
                       "lon":user_input[1],
@@ -109,9 +136,11 @@ if img and user_input:
         drop_off_list = get_dropoff(road_client=road_client,
                                     result_list= result_list,
                                     starting_point = pick_up,
-                                    prob_threshold = DUMMY_PROBABILITY_THRESHOLD,
+                                    prob_threshold = 0,
                                     profile=final_road_mode,
-                                    minimizer=minimizer)
+                                    minimizer=minimizer,
+                                    progress_callback=update_progress
+                                    )
 
 
         all_routes = []
@@ -122,6 +151,7 @@ if img and user_input:
                 "lon": pick_up["lon"],
                 "lat": pick_up["lat"],
                 "name": "Start",
+                "trash_type": "Start",
                 "distance":0,
                 "unit":" "
             })
@@ -139,7 +169,7 @@ if img and user_input:
             all_points.append({
                 "lon": drop_off["lon"],
                 "lat": drop_off["lat"],
-                "name": drop_off["trash_type"],
+                "trash_type": drop_off["trash_type"],
                 "distance_m":drop_off["distance_m"],
                 "duration_s":drop_off["duration_s"]
             })
@@ -161,7 +191,7 @@ if img and user_input:
         df_points,
         pickable=True,
         get_position='[lon, lat]',
-        get_text="name",
+        get_text="trash_type",
         get_color=[255, 255, 0],  # JAUNE 🔥
         get_size=20,
         get_alignment_baseline="'bottom'"
@@ -191,4 +221,16 @@ if img and user_input:
 
 
         st.subheader("Distances")
-        st.dataframe(df_points[["name", "distance_m","duration_s"]])
+        # Génération du texte pour chaque ligne
+        for step_index, (idx, row) in enumerate(df_points.iloc[1:].iterrows(), start=1):
+            minutes = row["duration_s"] / 60
+            kilometers = row["distance_m"] / 1000
+
+            step_text = (
+                f"### Step {step_index}\n"
+                f"**Destination:** Drop off your **{row['trash_type']}** waste\n"
+                f"**Estimated time:** {minutes:.1f} minutes\n"
+                f"**Distance:** {kilometers:.2f} km\n\n"
+            )
+
+            st.markdown(step_text)

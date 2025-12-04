@@ -1,10 +1,22 @@
 import pandas as pd
 
 DUMMY_PREDICT_RESULT = [
-    {"class": "Food Organics", "confidence": 0.7},
-    {"class": "Glass", "confidence": 0.5},
-    {"class": "Metal", "confidence": 0.02}
+        # {'class': 'Cardboard', 'confidence': 0.4866670072078705},
+        # {'class': 'Vegetation', 'confidence': 0.08185973018407822},
+        # {'class': 'Paper', 'confidence': 0.09999264031648636},
+        # {'class': 'Textile Trash', 'confidence': 0.051151342689991},
+        # #  {'class': 'Miscellaneous Trash', 'confidence': 0.1977834552526474},
+    {"class": "Cardboard", "confidence": 0.7},
+    {"class": "Food Organics", "confidence": 0.5},
+    {"class": "Paper", "confidence": 0.2},
+    {"class": "Vegetation", "confidence": 0.2},
+    {"class": "Textile Trash", "confidence": 0.7},
+    {"class": "Glass", "confidence": 0.7},
+    {"class": "Metal", "confidence": 0.5},
+    {"class": "Plastic", "confidence": 0.2},
+    # {"class": "Miscellaneous Trash", "confidence": 0.5}
 ]
+
 
 DUMMY_DROP_OFF = {"lat": 47.2138, "lon": -1.5487}
 

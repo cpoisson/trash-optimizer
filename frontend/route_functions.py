@@ -6,6 +6,7 @@ from dummy_function import dummy_get_loc
 from query.query import get_loc
 import time
 import pandas as pd
+import math
 
 def manhattan_distance(lat1, lon1, lat2, lon2):
     """Distance de Manhattan approximative en degrés (suffisant pour un pré-filtre)."""
@@ -33,10 +34,15 @@ def get_route_matrix(df, starting_point, road_client, profile="driving-car"):
     src_coord = [float(starting_point["lon"]), float(starting_point["lat"])]
 
     # 2) Destinations = liste de listes Python pures
-    dest_coords = df.apply(
-        lambda row: [float(row["Longitude"]), float(row["Latitude"])],
-        axis=1
-    ).tolist()  # ← très important : liste Python, pas Series
+    dest_coords = []
+
+    for idx, row in df.iterrows():
+        try:
+            lon = float(row["Longitude"])
+            lat = float(row["Latitude"])
+            dest_coords.append([lon, lat])
+        except (ValueError, TypeError) as e:
+            print(f"Ligne {idx} ignorée, coordonnées invalides : {row['Longitude']}, {row['Latitude']} ({e})")
 
     # 3) Locations = source + destinations
     locations = [src_coord] + dest_coords
@@ -63,7 +69,8 @@ def get_dropoff(
     prob_threshold=0.15,
     profile="driving-car",
     minimizer="distance",
-    keep_top_k=100
+    keep_top_k=100,
+    progress_callback=None
 ):
     #Get all Trash Class that are "worth" exploring based on the proba threshold
     keys_above_threshold = [
@@ -74,8 +81,11 @@ def get_dropoff(
     if not result_list:
         return []
     dfs = []
+    i = 0
+    total = len(keys_above_threshold)
     #Loop to keep the closest point while all trash classes have not yet been defined
     while len(keys_above_threshold) > 0:
+        print(f" where are checking the following classes{keys_above_threshold}")
         df_geoloc = get_loc(list_trash= keys_above_threshold).copy()
         df_geoloc["manhattan"] = df_geoloc.apply(
             lambda row: manhattan_distance(
@@ -104,8 +114,9 @@ def get_dropoff(
                       "lon":df_min_per_type["Longitude"],
                       "trash_type":"User Start Point",
                       "distance": 0}
-
-        print(df_geoloc["Trash_class"].unique())
+        if progress_callback:
+            progress_callback((i + 1) / total)
+            i = i+1
     if dfs:
         # Concatène tous les DataFrames et supprime les doublons
         cols_to_check = ["Trash_class", "Latitude", "Longitude", "distance_m", "duration_s"]  # les colonnes sûres
