@@ -1,0 +1,26 @@
+# Trash Optimizer Datasets Builder configuration file
+
+# Targeted categories for waste classification
+[configuration]
+categories = ["plastic", "paper", "glass",  "cardboard", "metal", "organic", "other"]
+root_data_dir = "~/Data/datasets"
+root_ouput_dir = "~/Data/datasets_processed"
+output_dataset_name = "trash_optimizer_dataset"
+output_max_per_category = 1000
+output_minimum_images_size_wh = [150, 150]
+
+# Dataset source configurations
+[[datasets]]
+name = "RealWaste"
+source = "kaggle"
+repository = "joebeachcapital/realwaste"
+citation = "https://archive.ics.uci.edu/dataset/908/realwaste"
+categories_mapping = { "plastic": "plastic", "paper": "paper", "glass": "glass", "metal": "metal", "organic": "organic", "other": "other" }
+
+
+[[datasets]]
+name = "RecyclableAmdHouseholdWasteClassification"
+source = "kaggle"
+repository = "alistairking/recyclable-and-household-waste-classificationt"
+citation = "https://www.kaggle.com/datasets/alistairking/recyclable-and-household-waste-classificationt"
+categories_mapping = { "plastic": "plastic", "paper": "paper", "glass": "glass", "cardboard": "cardboard", "metal": "metal", "organic": "organic", "other": "other" }
