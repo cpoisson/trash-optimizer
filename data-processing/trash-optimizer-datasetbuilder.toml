@@ -6,7 +6,7 @@ input_root_dir = "~/Data/trash-optimizer/datasets"
 input_img_extensions = [".jpg", ".jpeg", ".png"]
 output_root_dir = "~/Data/datasets_processed"
 output_dataset_name = "trash_optimizer_dataset"
-output_max_per_category = 500
+output_max_per_category = 200
 output_minimum_images_size_wh = [150, 150]
 output_categories = [
   "battery",

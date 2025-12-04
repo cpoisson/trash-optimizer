@@ -33,13 +33,14 @@ class DataSetBuilderConfig:
         return toml.load(config_path)
 
 class ImageDataset:
-    def __init__(self, name: str, path: Path, config: DataSetBuilderConfig, input_output_categories: dict):
+    def __init__(self, name: str, path: Path, config: DataSetBuilderConfig, input_output_categories: dict, readonly: bool = False):
         self.name = name
         self.path = path
         self.config = config
         self.input_output_categories = input_output_categories
         self.input_image_categories_paths = {}
         self.output_image_categories_paths = {}
+        self.readonly = readonly
 
     def __add__(self, other):
         """Combine two ImageDataset instances into one."""
@@ -268,6 +269,10 @@ class DataSetBuilder:
         rng = random.Random(seed)
         target_size = self.config.output_max_per_category
 
+        # Create temporary directory for augmented images
+        temp_aug_dir = Path(self.config.output_root_dir) / ".temp_augmented"
+        temp_aug_dir.mkdir(parents=True, exist_ok=True)
+
         # Get category counts
         category_counts = {}
         for input_cat, images in self.output_dataset.input_image_categories_paths.items():
@@ -310,9 +315,9 @@ class DataSetBuilder:
                         angle = rng.uniform(-15, 15)
                         aug_img = img.rotate(angle, expand=True)
 
-                    # Save augmented image to temporary path
-                    aug_img_name = f"{dataset_source}_aug_{i}_{base_img_path.stem}.jpg"
-                    aug_img_path = base_img_path.parent / aug_img_name
+                    # Save augmented image to temporary directory (not original dataset)
+                    aug_img_name = f"{dataset_source}_aug_{output_cat}_{i}_{base_img_path.stem}.jpg"
+                    aug_img_path = temp_aug_dir / aug_img_name
                     aug_img.save(aug_img_path, 'JPEG')
                     # Tag augmented image with source dataset
                     augmented_images.append((aug_img_path, dataset_source))
@@ -378,6 +383,12 @@ class DataSetBuilder:
         for source, count in sorted(dataset_contributions.items()):
             percentage = (count / total_images) * 100 if total_images > 0 else 0
             print(f"  - {source}: {count} images ({percentage:.1f}%)")
+
+        # Clean up temporary augmented images directory
+        temp_aug_dir = Path(self.config.output_root_dir) / ".temp_augmented"
+        if temp_aug_dir.exists():
+            shutil.rmtree(temp_aug_dir)
+            print(f"\n🧹 Cleaned up temporary files")
 
 
 def main():
