@@ -40,20 +40,38 @@ if address:
             st.error("Adresse introuvable. Vérifiez l'orthographe.")
     except Exception as e:
             st.error(f"Erreur lors du géocodage : {e}")
-road_mode = st.radio('Select a your drive mode', ('car','bike','foot'))
-if road_mode == 'car':
+
+
+col1, col2,col3  = st.columns(3)
+with col1:
+    minimizer = st.radio('Do you want to minimize:', ('duration','distance'), horizontal=True)
+# Step 1 — Let user choose how to provide the image
+with col2:
+    choice = st.radio(
+    "Choose how to provide an image:",
+    ("Upload a file", "Take a picture"),
+     horizontal=True)
+with col3:
+    road_mode = st.radio('Select a your drive mode', ('Car 🚗','Bike 🚴','Foot 👟'), horizontal=True)
+if road_mode == 'Car 🚗':
     final_road_mode = "driving-car"
-elif road_mode == 'bike':
+elif road_mode == 'Bike 🚴':
     final_road_mode = "cycling-regular"
-elif road_mode == 'foot':
+elif road_mode == 'Foot 👟':
     final_road_mode = "foot-walking"
 
-minimizer = st.radio('Do you want to minimize:', ('distance','duration'))
-# Step 1 — Let user choose how to provide the image
-choice = st.radio(
-    "Choose how to provide an image:",
-    ("Upload a file", "Take a picture")
-)
+col4,col5,col6 = st.columns(3)
+with col4:
+    misc = st.checkbox("Check here to throw miscellaneous trash 🗑 on the road")
+with col5:
+    recycling = st.checkbox("Check here to throw recycling trash ♻️ on the road")
+with col6:
+    ress = st.checkbox("Check here to add good-looking items to a ressourcerie on the road")
+
+with st.expander("Your selections"):
+    st.write(f"- Miscellaneous trash: {'On the road' if misc else 'At home'}")
+    st.write(f"- Recycling trash: {'On the road' if recycling else 'At home'}")
+    st.write(f"- Good-looking items to ressourcerie: {'Added to the road' if ress else 'Not added to the road'}")
 
 uploaded_file = None
 camera_image = None
