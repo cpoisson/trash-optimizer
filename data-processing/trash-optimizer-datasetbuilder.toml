@@ -2,26 +2,66 @@
 
 # Targeted categories for waste classification
 [configuration]
-supported_extensions = [".jpg", ".jpeg", ".png"]
-root_data_dir = "~/Data/datasets"
-root_ouput_dir = "~/Data/datasets_processed"
+input_root_dir = "~/Data/trash-optimizer/datasets"
+input_img_extensions = [".jpg", ".jpeg", ".png"]
+output_root_dir = "~/Data/datasets_processed"
 output_dataset_name = "trash_optimizer_dataset"
 output_max_per_category = 1000
 output_minimum_images_size_wh = [150, 150]
-ouput_categories = ["plastic", "paper", "glass",  "cardboard", "metal", "organic", "other"]
+output_categories = ["plastic", "paper", "glass",  "cardboard", "metal", "organic", "other"]
 
 # Dataset source configurations
-[[datasets]]
-name = "RealWaste"
+[[configuration.datasets]]
+folder_name = "realwaste"
 source = "kaggle"
 repository = "joebeachcapital/realwaste"
 citation = "https://archive.ics.uci.edu/dataset/908/realwaste"
-categories_mapping = { "plastic": "plastic", "paper": "paper", "glass": "glass", "metal": "metal", "organic": "organic", "other": "other" }
 
+[configuration.datasets.input_output_categories]
+"Cardboard" = "cardboard"
+"Food Organics" = "food_organics"
+"Glass" = "glass"
+"Metal" = "metal"
+"Miscellaneous Trash" = "miscellaneous_trash"
+"Paper" = "paper"
+"Plastic" = "plastic"
+"Textile Trash" = "textile_trash"
+"Vegetation" = "vegetation"
 
-[[datasets]]
-name = "RecyclableAmdHouseholdWasteClassification"
+[[configuration.datasets]]
+folder_name = "RHWC"
 source = "kaggle"
 repository = "alistairking/recyclable-and-household-waste-classificationt"
 citation = "https://www.kaggle.com/datasets/alistairking/recyclable-and-household-waste-classificationt"
-categories_mapping = { "plastic": "plastic", "paper": "paper", "glass": "glass", "cardboard": "cardboard", "metal": "metal", "organic": "organic", "other": "other" }
+
+[configuration.datasets.input_output_categories]
+plastic_water_bottles = "plastic"
+plastic_soda_bottles = "plastic"
+plastic_detergent_bottles = "plastic"
+plastic_shopping_bags = "plastic"
+plastic_trash_bags = "plastic"
+plastic_food_containers = "plastic"
+disposable_plastic_cutlery = "plastic"
+plastic_straws = "plastic"
+plastic_cup_lids = "plastic"
+styrofoam_food_containers = "miscellaneous_trash"
+styrofoam_cups = "miscellaneous_trash"
+paper_cups = "paper"
+newspaper = "paper"
+office_paper = "paper"
+magazines = "paper"
+cardboard_boxes = "cardboard"
+cardboard_packaging = "cardboard"
+glass_beverage_bottles = "glass"
+glass_food_jars = "glass"
+glass_cosmetic_containers = "glass"
+aluminum_soda_cans = "metal"
+aluminum_food_cans = "metal"
+steel_food_cans = "metal"
+aerosol_cans = "metal"
+food_waste = "food_organics"
+eggshells = "food_organics"
+coffee_grounds = "food_organics"
+tea_bags = "food_organics"
+clothing = "textile_trash"
+shoes = "textile_trash"
