@@ -25,6 +25,7 @@ class DataSetBuilderConfig:
         self.output_max_per_category = config["output_max_per_category"]
         self.output_minimum_images_size_wh = tuple(config["output_minimum_images_size_wh"])
         self.output_categories = config.get("output_categories", [])
+        self.output_augmentation = config.get("output_augmentation", False)
         self.datasets = config.get("datasets", [])
 
     @staticmethod
@@ -267,13 +268,8 @@ class DataSetBuilder:
                 print(f"Downloaded Kaggle dataset '{folder_name}' to {dataset_path}.")
 
             elif source == "huggingface":
-                repository = ds.get("repository")
-                if not repository:
-                    print(f"No repository specified for Hugging Face dataset '{folder_name}', skipping.")
-                    continue
-                print(f"Downloading Hugging Face dataset '{folder_name}' from '{repository}'...")
-                huggingface_hub.hf_hub_download(repo_id=repository, local_dir=dataset_path, repo_type="dataset")
-                print(f"Downloaded Hugging Face dataset '{folder_name}' to {dataset_path}.")
+                print(f"Downloading Hugging Face dataset not yet implemented, skipping.")
+                raise NotImplementedError("Hugging Face dataset download not implemented yet.")
 
             else:
                 print(f"Unknown source '{source}' for dataset '{folder_name}', skipping download.")
@@ -420,10 +416,23 @@ class DataSetBuilder:
                 summary_file.write(f"  - {source}: {count} images ({percentage:.1f}%)\n")
 
         print(f"✓ Dataset saved to: {output_path}")
+
+        # Display images per category
+        print(f"\n📦 Images per category:")
+        category_counts = {}
+        for category, tagged_images in self.output_dataset.output_image_categories_paths.items():
+            category_counts[category] = len(tagged_images)
+
+        for category in sorted(category_counts.keys()):
+            count = category_counts[category]
+            print(f"  - {category}: {count} images")
+
         print(f"\n📊 Dataset contribution summary:")
         for source, count in sorted(dataset_contributions.items()):
             percentage = (count / total_images) * 100 if total_images > 0 else 0
             print(f"  - {source}: {count} images ({percentage:.1f}%)")
+
+        print(f"\n📈 Total: {total_images} images across {len(category_counts)} categories")
 
         # Clean up temporary augmented images directory
         temp_aug_dir = Path(self.config.output_root_dir) / ".temp_augmented"
@@ -436,7 +445,12 @@ def main():
     config = DataSetBuilderConfig(Path(CONFIGURATION_FILE))
     builder = DataSetBuilder(config)
     builder.create_dataset()
-    builder.balance_datasets()
+
+    if config.output_augmentation:
+        builder.balance_datasets()
+    else:
+        print("Skipping dataset balancing")
+
     builder.save_dataset()
 
 

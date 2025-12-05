@@ -8,6 +8,7 @@ output_root_dir = "~/Data/datasets_processed"
 output_dataset_name = "trash_optimizer_dataset"
 output_max_per_category = 200
 output_minimum_images_size_wh = [150, 150]
+output_augmentation = false
 output_categories = [
   "battery",
   "car_battery",
@@ -46,10 +47,10 @@ citation = "https://archive.ics.uci.edu/dataset/908/realwaste"
 "Vegetation" = "vegetation"
 
 [[configuration.datasets]]
-folder_name = "RHWC"
+folder_name = "rhwc"
 source = "kaggle"
-repository = "alistairking/recyclable-and-household-waste-classificationt"
-citation = "https://www.kaggle.com/datasets/alistairking/recyclable-and-household-waste-classificationt"
+repository = "alistairking/recyclable-and-household-waste-classification"
+citation = "https://www.kaggle.com/datasets/alistairking/recyclable-and-household-waste-classification"
 
 [configuration.datasets.input_output_categories]
 "aerosol_cans" = "metal"
