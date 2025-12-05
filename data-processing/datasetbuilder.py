@@ -6,12 +6,54 @@ from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 import toml
 import time
 import os
+import logging
+import sys
 from dotenv import load_dotenv
 import kagglehub
 import huggingface_hub
 
 load_dotenv()
 CONFIGURATION_FILE = os.getenv("BUILDER_CONFIGURATION", "config.toml")
+
+# Global logger instance
+logger = None
+
+def setup_logger(output_path: Path):
+    """Setup logger to write to both console and file."""
+    global logger
+
+    # Create logger
+    logger = logging.getLogger('DatasetBuilder')
+    logger.setLevel(logging.INFO)
+
+    # Remove existing handlers
+    logger.handlers = []
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_format = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_format)
+
+    # File handler
+    log_file = output_path / 'dataset_builder.log'
+    file_handler = logging.FileHandler(log_file, mode='w')
+    file_handler.setLevel(logging.INFO)
+    file_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_format)
+
+    # Add handlers
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+def log(message: str):
+    """Log message to both console and file."""
+    if logger:
+        logger.info(message)
+    else:
+        print(message)
 
 class DataSetBuilderConfig:
     """Configuration for dataset building and processing."""
@@ -435,14 +477,29 @@ class DataSetBuilder:
 
     def save_dataset(self):
         """ Save the processed dataset to output directory """
-        print("Saving dataset...")
         if not self.output_dataset:
             raise ValueError("No output dataset to save. Run create_dataset first.")
         # Add timestamp to output path to avoid overwriting
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         output_folder_name = f"{self.config.output_dataset_name}_{timestamp}"
         output_path = self.config.output_root_dir / output_folder_name
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Setup logger to write to output directory
+        setup_logger(output_path)
+        log("="*60)
+        log("Dataset Builder Execution Log")
+        log("="*60)
+        log(f"Timestamp: {timestamp}")
+        log(f"Configuration file: {CONFIGURATION_FILE}")
+        log(f"Output directory: {output_path}")
+        log("")
+
+        log("Saving dataset...")
+        log("")
         self.output_dataset.save(output_path)
+        log("")
+
         # Add a detailed summary file showing per-dataset contributions
         summary_path = output_path / "dataset_summary.txt"
         with open(summary_path, "w") as summary_file:
@@ -483,32 +540,35 @@ class DataSetBuilder:
                 percentage = (count / total_images) * 100 if total_images > 0 else 0
                 summary_file.write(f"  - {source}: {count} images ({percentage:.1f}%)\n")
 
-        print(f"✓ Dataset saved to: {output_path}")
+        log(f"✓ Dataset saved to: {output_path}")
 
         # Display images per category
-        print(f"\n📦 Images per category:")
+        log(f"\n📦 Images per category:")
         category_counts = {}
         for category, tagged_images in self.output_dataset.output_image_categories_paths.items():
             category_counts[category] = len(tagged_images)
 
         for category in sorted(category_counts.keys()):
             count = category_counts[category]
-            print(f"  - {category}: {count} images")
+            log(f"  - {category}: {count} images")
 
-        print(f"\n📊 Dataset contribution summary:")
+        log(f"\n📊 Dataset contribution summary:")
         for source, count in sorted(dataset_contributions.items()):
             percentage = (count / total_images) * 100 if total_images > 0 else 0
-            print(f"  - {source}: {count} images ({percentage:.1f}%)")
+            log(f"  - {source}: {count} images ({percentage:.1f}%)")
 
-        print(f"\n📈 Total: {total_images} images across {len(category_counts)} categories")
+        log(f"\n📈 Total: {total_images} images across {len(category_counts)} categories")
 
         # Clean up temporary augmented images directory
         temp_aug_dir = Path(self.config.output_root_dir) / ".temp_augmented"
         if temp_aug_dir.exists():
             shutil.rmtree(temp_aug_dir)
-            print(f"\n🧹 Cleaned up temporary files")
+            log(f"\n🧹 Cleaned up temporary files")
 
-
+        log("")
+        log("="*60)
+        log("Dataset build completed successfully")
+        log("="*60)
 def main():
     config = DataSetBuilderConfig(Path(CONFIGURATION_FILE))
     builder = DataSetBuilder(config)
