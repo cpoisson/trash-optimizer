@@ -340,7 +340,39 @@ class DataSetBuilder:
         # Balance contributions across datasets for each output category
         self._balance_dataset_contributions()
 
+        # Verify output categories coverage
+        self._verify_output_categories_coverage()
+
         print(f"✓ Combined {len(self.datasets)} datasets into output dataset")
+
+    def _verify_output_categories_coverage(self):
+        """Verify that all configured output categories have images.
+        Print warnings for any missing categories.
+        """
+        if not self.config.output_categories:
+            return  # No categories specified, skip verification
+
+        # Get actual categories present in the output dataset
+        actual_categories = set(self.output_dataset.output_image_categories_paths.keys())
+        expected_categories = set(self.config.output_categories)
+
+        # Find missing categories
+        missing_categories = expected_categories - actual_categories
+
+        if missing_categories:
+            print(f"\n⚠️  Warning: {len(missing_categories)} output categories have no images:")
+            for category in sorted(missing_categories):
+                print(f"    - {category}")
+            print(f"    These categories were specified in output_categories but no images were found.")
+            print(f"    Check your input_output_categories mappings in the configuration file.")
+
+        # Find extra categories (present but not expected)
+        extra_categories = actual_categories - expected_categories
+        if extra_categories:
+            print(f"\n📝 Note: {len(extra_categories)} additional categories found (not in output_categories):")
+            for category in sorted(extra_categories):
+                count = len(self.output_dataset.output_image_categories_paths[category])
+                print(f"    - {category}: {count} images")
 
     def _balance_dataset_contributions(self, seed: int = 42):
         """Balance contributions from different datasets for each output category.
