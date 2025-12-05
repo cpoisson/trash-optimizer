@@ -6,9 +6,54 @@ from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 import toml
 import time
 import os
+import logging
+import sys
 from dotenv import load_dotenv
+import kagglehub
+import huggingface_hub
+
 load_dotenv()
 CONFIGURATION_FILE = os.getenv("BUILDER_CONFIGURATION", "config.toml")
+
+# Global logger instance
+logger = None
+
+def setup_logger(output_path: Path):
+    """Setup logger to write to both console and file."""
+    global logger
+
+    # Create logger
+    logger = logging.getLogger('DatasetBuilder')
+    logger.setLevel(logging.INFO)
+
+    # Remove existing handlers
+    logger.handlers = []
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_format = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_format)
+
+    # File handler
+    log_file = output_path / 'dataset_builder.log'
+    file_handler = logging.FileHandler(log_file, mode='w')
+    file_handler.setLevel(logging.INFO)
+    file_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_format)
+
+    # Add handlers
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+def log(message: str):
+    """Log message to both console and file."""
+    if logger:
+        logger.info(message)
+    else:
+        print(message)
 
 class DataSetBuilderConfig:
     """Configuration for dataset building and processing."""
@@ -22,6 +67,7 @@ class DataSetBuilderConfig:
         self.output_max_per_category = config["output_max_per_category"]
         self.output_minimum_images_size_wh = tuple(config["output_minimum_images_size_wh"])
         self.output_categories = config.get("output_categories", [])
+        self.output_augmentation = config.get("output_augmentation", False)
         self.datasets = config.get("datasets", [])
 
     @staticmethod
@@ -228,6 +274,7 @@ class DataSetBuilder:
 
     def __init__(self, config: DataSetBuilderConfig):
         self.config = config
+        self.download_datasets()
         self.datasets = [
             ImageDataset(
                 name=ds["folder_name"],
@@ -238,6 +285,38 @@ class DataSetBuilder:
             for ds in config.datasets
         ]
         self.output_dataset = None
+
+    def download_datasets(self):
+        """ Download datasets from if needed. Kaggle and Hugging Face are supported."""
+        print("Downloading datasets...")
+
+        for ds in self.config.datasets:
+            source = ds.get("source", "").lower()
+            folder_name = ds["folder_name"]
+            dataset_path = self.config.input_root_dir / folder_name
+
+            if dataset_path.exists():
+                print(f"Dataset '{folder_name}' already exists at {dataset_path}, skipping download.")
+                continue
+
+            if source == "kaggle":
+                repository = ds.get("repository")
+                if not repository:
+                    print(f"No repository specified for Kaggle dataset '{folder_name}', skipping.")
+                    continue
+                print(f"Downloading Kaggle dataset '{folder_name}' from '{repository}'...")
+                downloaded_path = kagglehub.dataset_download(repository)
+                shutil.move(downloaded_path, dataset_path)
+                print(f"Downloaded Kaggle dataset '{folder_name}' to {dataset_path}.")
+
+            elif source == "huggingface":
+                print(f"Downloading Hugging Face dataset not yet implemented, skipping.")
+                raise NotImplementedError("Hugging Face dataset download not implemented yet.")
+
+            else:
+                print(f"Unknown source '{source}' for dataset '{folder_name}', skipping download.")
+
+
 
     def create_dataset(self):
         """ Assemble datasets according to configuration.
@@ -258,7 +337,107 @@ class DataSetBuilder:
             print(f"Combining dataset: {dataset.name}")
             self.output_dataset = self.output_dataset + dataset
 
+        # Balance contributions across datasets for each output category
+        self._balance_dataset_contributions()
+
+        # Verify output categories coverage
+        self._verify_output_categories_coverage()
+
         print(f"✓ Combined {len(self.datasets)} datasets into output dataset")
+
+    def _verify_output_categories_coverage(self):
+        """Verify that all configured output categories have images.
+        Print warnings for any missing categories.
+        """
+        if not self.config.output_categories:
+            return  # No categories specified, skip verification
+
+        # Get actual categories present in the output dataset
+        actual_categories = set(self.output_dataset.output_image_categories_paths.keys())
+        expected_categories = set(self.config.output_categories)
+
+        # Find missing categories
+        missing_categories = expected_categories - actual_categories
+
+        if missing_categories:
+            print(f"\n⚠️  Warning: {len(missing_categories)} output categories have no images:")
+            for category in sorted(missing_categories):
+                print(f"    - {category}")
+            print(f"    These categories were specified in output_categories but no images were found.")
+            print(f"    Check your input_output_categories mappings in the configuration file.")
+
+        # Find extra categories (present but not expected)
+        extra_categories = actual_categories - expected_categories
+        if extra_categories:
+            print(f"\n📝 Note: {len(extra_categories)} additional categories found (not in output_categories):")
+            for category in sorted(extra_categories):
+                count = len(self.output_dataset.output_image_categories_paths[category])
+                print(f"    - {category}: {count} images")
+
+    def _balance_dataset_contributions(self, seed: int = 42):
+        """Balance contributions from different datasets for each output category.
+        Ensures fair representation by sampling images to achieve equal contribution per dataset.
+        """
+        rng = random.Random(seed)
+        target_size = self.config.output_max_per_category
+
+        for output_cat, tagged_images in self.output_dataset.output_image_categories_paths.items():
+            # Count images per source dataset
+            dataset_images = {}
+            for img_data in tagged_images:
+                if isinstance(img_data, tuple):
+                    img_path, dataset_source = img_data
+                else:
+                    img_path = img_data
+                    dataset_source = "unknown"
+
+                if dataset_source not in dataset_images:
+                    dataset_images[dataset_source] = []
+                dataset_images[dataset_source].append(img_data)
+
+            # Skip if only one dataset contributes to this category
+            if len(dataset_images) <= 1:
+                continue
+
+            num_datasets = len(dataset_images)
+            total_available = len(tagged_images)
+
+            # Calculate fair contribution per dataset (considering output_max_per_category)
+            max_images_to_use = min(target_size, total_available)
+            fair_contribution = max_images_to_use // num_datasets
+
+            # Sample images fairly from each dataset
+            balanced_images = []
+            actual_contributions = {}
+
+            for dataset_source, images in dataset_images.items():
+                # Take up to fair_contribution images from each dataset
+                num_to_take = min(fair_contribution, len(images))
+                sampled = rng.sample(images, num_to_take) if len(images) > num_to_take else images
+                balanced_images.extend(sampled)
+                actual_contributions[dataset_source] = num_to_take
+
+            # Calculate contribution balance and warn if imbalanced
+            if balanced_images:
+                total_balanced = len(balanced_images)
+                expected_percentage = 100.0 / num_datasets
+
+                imbalance_warning = False
+                for dataset_source, count in actual_contributions.items():
+                    actual_percentage = (count / total_balanced) * 100
+                    deviation = abs(actual_percentage - expected_percentage)
+
+                    if deviation > 10.0:  # More than 10% deviation from equilibrium
+                        imbalance_warning = True
+
+                if imbalance_warning:
+                    print(f"⚠️  Warning: Category '{output_cat}' has imbalanced dataset contributions:")
+                    for dataset_source, count in sorted(actual_contributions.items()):
+                        actual_percentage = (count / total_balanced) * 100
+                        print(f"    - {dataset_source}: {count} images ({actual_percentage:.1f}%, expected {expected_percentage:.1f}%)")
+
+                # Replace with balanced images
+                self.output_dataset.output_image_categories_paths[output_cat] = balanced_images
 
     def balance_datasets(self, seed: int = 42):
         """ Balance datasets using augmentation to reach target sizes"""
@@ -330,14 +509,29 @@ class DataSetBuilder:
 
     def save_dataset(self):
         """ Save the processed dataset to output directory """
-        print("Saving dataset...")
         if not self.output_dataset:
             raise ValueError("No output dataset to save. Run create_dataset first.")
         # Add timestamp to output path to avoid overwriting
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         output_folder_name = f"{self.config.output_dataset_name}_{timestamp}"
         output_path = self.config.output_root_dir / output_folder_name
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Setup logger to write to output directory
+        setup_logger(output_path)
+        log("="*60)
+        log("Dataset Builder Execution Log")
+        log("="*60)
+        log(f"Timestamp: {timestamp}")
+        log(f"Configuration file: {CONFIGURATION_FILE}")
+        log(f"Output directory: {output_path}")
+        log("")
+
+        log("Saving dataset...")
+        log("")
         self.output_dataset.save(output_path)
+        log("")
+
         # Add a detailed summary file showing per-dataset contributions
         summary_path = output_path / "dataset_summary.txt"
         with open(summary_path, "w") as summary_file:
@@ -378,24 +572,45 @@ class DataSetBuilder:
                 percentage = (count / total_images) * 100 if total_images > 0 else 0
                 summary_file.write(f"  - {source}: {count} images ({percentage:.1f}%)\n")
 
-        print(f"✓ Dataset saved to: {output_path}")
-        print(f"\n📊 Dataset contribution summary:")
+        log(f"✓ Dataset saved to: {output_path}")
+
+        # Display images per category
+        log(f"\n📦 Images per category:")
+        category_counts = {}
+        for category, tagged_images in self.output_dataset.output_image_categories_paths.items():
+            category_counts[category] = len(tagged_images)
+
+        for category in sorted(category_counts.keys()):
+            count = category_counts[category]
+            log(f"  - {category}: {count} images")
+
+        log(f"\n📊 Dataset contribution summary:")
         for source, count in sorted(dataset_contributions.items()):
             percentage = (count / total_images) * 100 if total_images > 0 else 0
-            print(f"  - {source}: {count} images ({percentage:.1f}%)")
+            log(f"  - {source}: {count} images ({percentage:.1f}%)")
+
+        log(f"\n📈 Total: {total_images} images across {len(category_counts)} categories")
 
         # Clean up temporary augmented images directory
         temp_aug_dir = Path(self.config.output_root_dir) / ".temp_augmented"
         if temp_aug_dir.exists():
             shutil.rmtree(temp_aug_dir)
-            print(f"\n🧹 Cleaned up temporary files")
+            log(f"\n🧹 Cleaned up temporary files")
 
-
+        log("")
+        log("="*60)
+        log("Dataset build completed successfully")
+        log("="*60)
 def main():
     config = DataSetBuilderConfig(Path(CONFIGURATION_FILE))
     builder = DataSetBuilder(config)
     builder.create_dataset()
-    builder.balance_datasets()
+
+    if config.output_augmentation:
+        builder.balance_datasets()
+    else:
+        print("Skipping dataset balancing")
+
     builder.save_dataset()
 
 
