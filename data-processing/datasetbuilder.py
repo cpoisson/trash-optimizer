@@ -295,7 +295,75 @@ class DataSetBuilder:
             print(f"Combining dataset: {dataset.name}")
             self.output_dataset = self.output_dataset + dataset
 
+        # Balance contributions across datasets for each output category
+        self._balance_dataset_contributions()
+
         print(f"✓ Combined {len(self.datasets)} datasets into output dataset")
+
+    def _balance_dataset_contributions(self, seed: int = 42):
+        """Balance contributions from different datasets for each output category.
+        Ensures fair representation by sampling images to achieve equal contribution per dataset.
+        """
+        rng = random.Random(seed)
+        target_size = self.config.output_max_per_category
+
+        for output_cat, tagged_images in self.output_dataset.output_image_categories_paths.items():
+            # Count images per source dataset
+            dataset_images = {}
+            for img_data in tagged_images:
+                if isinstance(img_data, tuple):
+                    img_path, dataset_source = img_data
+                else:
+                    img_path = img_data
+                    dataset_source = "unknown"
+
+                if dataset_source not in dataset_images:
+                    dataset_images[dataset_source] = []
+                dataset_images[dataset_source].append(img_data)
+
+            # Skip if only one dataset contributes to this category
+            if len(dataset_images) <= 1:
+                continue
+
+            num_datasets = len(dataset_images)
+            total_available = len(tagged_images)
+
+            # Calculate fair contribution per dataset (considering output_max_per_category)
+            max_images_to_use = min(target_size, total_available)
+            fair_contribution = max_images_to_use // num_datasets
+
+            # Sample images fairly from each dataset
+            balanced_images = []
+            actual_contributions = {}
+
+            for dataset_source, images in dataset_images.items():
+                # Take up to fair_contribution images from each dataset
+                num_to_take = min(fair_contribution, len(images))
+                sampled = rng.sample(images, num_to_take) if len(images) > num_to_take else images
+                balanced_images.extend(sampled)
+                actual_contributions[dataset_source] = num_to_take
+
+            # Calculate contribution balance and warn if imbalanced
+            if balanced_images:
+                total_balanced = len(balanced_images)
+                expected_percentage = 100.0 / num_datasets
+
+                imbalance_warning = False
+                for dataset_source, count in actual_contributions.items():
+                    actual_percentage = (count / total_balanced) * 100
+                    deviation = abs(actual_percentage - expected_percentage)
+
+                    if deviation > 10.0:  # More than 10% deviation from equilibrium
+                        imbalance_warning = True
+
+                if imbalance_warning:
+                    print(f"⚠️  Warning: Category '{output_cat}' has imbalanced dataset contributions:")
+                    for dataset_source, count in sorted(actual_contributions.items()):
+                        actual_percentage = (count / total_balanced) * 100
+                        print(f"    - {dataset_source}: {count} images ({actual_percentage:.1f}%, expected {expected_percentage:.1f}%)")
+
+                # Replace with balanced images
+                self.output_dataset.output_image_categories_paths[output_cat] = balanced_images
 
     def balance_datasets(self, seed: int = 42):
         """ Balance datasets using augmentation to reach target sizes"""
