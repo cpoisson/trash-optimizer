@@ -6,7 +6,7 @@ from  .params import category_mapping
 
 def get_loc(list_trash = None):
     if list_trash is None:
-        list_trash = ["Food Organics"]
+        list_trash = ["food_organics"]
     load_dotenv()
     print(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
     GCP_PROJECT = os.getenv("GCP_PROJECT")
@@ -26,7 +26,7 @@ def get_loc(list_trash = None):
             Longitude,
             Latitude,
             '{category}' AS Trash_class
-        FROM `{GCP_PROJECT}.{GCP_DATASET}.trash_collection_points_with_miscellaneous`
+        FROM `{GCP_PROJECT}.{GCP_DATASET}.trash_collection_points_complete`
         WHERE {category_mapping[category]}
         AND Longitude IS NOT NULL
         AND Latitude IS NOT NULL
