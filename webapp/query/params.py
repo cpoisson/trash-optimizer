@@ -15,5 +15,7 @@ category_mapping = {
     "tire":"Is_Tire_enabled=1",
     "printer_cartridge":"Is_Cartridge_enabled=1",
     "wood":"Is_Miscellanous_Trash_enabled =1", # TO be changed
-    "ressourcerie":"Is_Ressourcerie_enabled=1"
+    "ressourcerie":"Is_Ressourcerie_enabled=1",
+    "light_bulb":"Is_Lamp_Light_enabled=1",
+    "battery":"Is_Lamp_Light_enabled=1"     # TO be changed
 }
