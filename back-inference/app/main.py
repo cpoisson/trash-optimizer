@@ -14,8 +14,6 @@ import huggingface_hub as hf
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_MODEL_REPO_ID = os.getenv("HF_MODEL_REPO_ID")
-HF_MODEL_FILENAME = os.getenv("HF_MODEL_FILENAME")
-HF_MODEL_CATEGORIES_FILENAME = os.getenv("HF_MODEL_CATEGORIES_FILENAME")
 
 app = FastAPI(title="Inference Backend", version="1.0.0")
 
@@ -24,11 +22,24 @@ if HF_TOKEN and HF_MODEL_REPO_ID:
     print("Loading model from Hugging Face Hub...")
     hf.login(token=HF_TOKEN)
 
+    # Download and read the latest file to get the model version folder name
+    latest_file_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename="latest")
+    with open(latest_file_path, "r") as f:
+        latest_model_folder = f.read().strip()
+
+    print(f"Latest model folder: {latest_model_folder}")
+
+    # Construct remote filenames (these are paths within the repo, not local paths)
+    hf_model_filename = f"{latest_model_folder}/model.pth"
+    hf_model_categories_filename = f"{latest_model_folder}/categories.txt"
+
     # Download model file
-    model_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=HF_MODEL_FILENAME)
+    model_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=hf_model_filename)
+    print(f"Model downloaded to: {model_path}")
 
     # Download and load class mapping first to get num_classes
-    class_mapping_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=HF_MODEL_CATEGORIES_FILENAME)
+    class_mapping_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=hf_model_categories_filename)
+    print(f"Categories downloaded to: {class_mapping_path}")
 
     # Load class labels
     with open(class_mapping_path, "r") as f:
@@ -57,22 +68,20 @@ if HF_TOKEN and HF_MODEL_REPO_ID:
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
-
 else:
-    # Load default model and weights
-    print("Loading default EfficientNet_B0 model...")
-    weights = EfficientNet_B0_Weights.IMAGENET1K_V1
-    model = efficientnet_b0(weights=weights)
-    model.eval()
-    # Get preprocessing transforms
-    preprocess = weights.transforms()
-    # Get class labels
-    categories = weights.meta["categories"]
+    raise EnvironmentError("HF_TOKEN and HF_MODEL_REPO_ID must be set in environment variables.")
 
 
 @app.get("/")
 def read_root():
     return {"message": "Inference Backend API", "status": "running"}
+
+@app.get("/health")
+def health_check():
+    """
+    Health check endpoint to verify the service is running.
+    """
+    return {"status": "healthy"}
 
 @app.get("/categories")
 def get_categories():
