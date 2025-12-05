@@ -7,6 +7,9 @@ import toml
 import time
 import os
 from dotenv import load_dotenv
+import kagglehub
+import huggingface_hub
+
 load_dotenv()
 CONFIGURATION_FILE = os.getenv("BUILDER_CONFIGURATION", "config.toml")
 
@@ -228,6 +231,7 @@ class DataSetBuilder:
 
     def __init__(self, config: DataSetBuilderConfig):
         self.config = config
+        self.download_datasets()
         self.datasets = [
             ImageDataset(
                 name=ds["folder_name"],
@@ -238,6 +242,43 @@ class DataSetBuilder:
             for ds in config.datasets
         ]
         self.output_dataset = None
+
+    def download_datasets(self):
+        """ Download datasets from if needed. Kaggle and Hugging Face are supported."""
+        print("Downloading datasets...")
+
+        for ds in self.config.datasets:
+            source = ds.get("source", "").lower()
+            folder_name = ds["folder_name"]
+            dataset_path = self.config.input_root_dir / folder_name
+
+            if dataset_path.exists():
+                print(f"Dataset '{folder_name}' already exists at {dataset_path}, skipping download.")
+                continue
+
+            if source == "kaggle":
+                repository = ds.get("repository")
+                if not repository:
+                    print(f"No repository specified for Kaggle dataset '{folder_name}', skipping.")
+                    continue
+                print(f"Downloading Kaggle dataset '{folder_name}' from '{repository}'...")
+                downloaded_path = kagglehub.dataset_download(repository)
+                shutil.move(downloaded_path, dataset_path)
+                print(f"Downloaded Kaggle dataset '{folder_name}' to {dataset_path}.")
+
+            elif source == "huggingface":
+                repository = ds.get("repository")
+                if not repository:
+                    print(f"No repository specified for Hugging Face dataset '{folder_name}', skipping.")
+                    continue
+                print(f"Downloading Hugging Face dataset '{folder_name}' from '{repository}'...")
+                huggingface_hub.hf_hub_download(repo_id=repository, local_dir=dataset_path, repo_type="dataset")
+                print(f"Downloaded Hugging Face dataset '{folder_name}' to {dataset_path}.")
+
+            else:
+                print(f"Unknown source '{source}' for dataset '{folder_name}', skipping download.")
+
+
 
     def create_dataset(self):
         """ Assemble datasets according to configuration.
