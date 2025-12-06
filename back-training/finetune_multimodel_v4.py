@@ -355,6 +355,219 @@ def evaluate_per_class_metrics(model, val_loader, class_names, device):
     return class_accuracies
 
 
+def get_dataset_statistics(dataset_root, class_names):
+    """Collect comprehensive dataset statistics"""
+    stats = {
+        'total_images': 0,
+        'classes': {},
+        'dataset_path': dataset_root,
+        'num_classes': len(class_names)
+    }
+
+    for class_name in class_names:
+        class_path = Path(dataset_root) / class_name
+        if class_path.exists():
+            images = list(class_path.glob('*.jpg')) + list(class_path.glob('*.png')) + \
+                    list(class_path.glob('*.jpeg')) + list(class_path.glob('*.JPG'))
+            count = len(images)
+            stats['classes'][class_name] = count
+            stats['total_images'] += count
+
+    # Calculate balance metrics
+    counts = list(stats['classes'].values())
+    if counts:
+        stats['min_images_per_class'] = min(counts)
+        stats['max_images_per_class'] = max(counts)
+        stats['avg_images_per_class'] = sum(counts) / len(counts)
+        stats['imbalance_ratio'] = max(counts) / min(counts) if min(counts) > 0 else 0
+
+    return stats
+
+
+def generate_confusion_matrix(model, val_loader, class_names, device, save_path):
+    """Generate and save confusion matrix"""
+    model.eval()
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for inputs, labels in val_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs, 1)
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    cm = confusion_matrix(all_labels, all_preds)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 10))
+
+    # Raw counts
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names, ax=ax1)
+    ax1.set_xlabel('Predicted', fontsize=12)
+    ax1.set_ylabel('True', fontsize=12)
+    ax1.set_title('Confusion Matrix (Counts)', fontsize=14, fontweight='bold')
+    plt.setp(ax1.get_xticklabels(), rotation=45, ha='right')
+    plt.setp(ax1.get_yticklabels(), rotation=0)
+
+    # Normalized
+    sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names, ax=ax2)
+    ax2.set_xlabel('Predicted', fontsize=12)
+    ax2.set_ylabel('True', fontsize=12)
+    ax2.set_title('Confusion Matrix (Normalized)', fontsize=14, fontweight='bold')
+    plt.setp(ax2.get_xticklabels(), rotation=45, ha='right')
+    plt.setp(ax2.get_yticklabels(), rotation=0)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"📊 Confusion matrix saved to {save_path}")
+
+
+def generate_training_curves(history, save_path):
+    """Generate and save training curves"""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    epochs = range(1, len(history['train_loss']) + 1)
+
+    # Loss curves
+    axes[0, 0].plot(epochs, history['train_loss'], 'b-', label='Train Loss', linewidth=2)
+    axes[0, 0].plot(epochs, history['val_loss'], 'r-', label='Val Loss', linewidth=2)
+    axes[0, 0].set_xlabel('Epoch', fontsize=12)
+    axes[0, 0].set_ylabel('Loss', fontsize=12)
+    axes[0, 0].set_title('Training and Validation Loss', fontsize=14, fontweight='bold')
+    axes[0, 0].legend(fontsize=10)
+    axes[0, 0].grid(True, alpha=0.3)
+
+    # Accuracy curves
+    axes[0, 1].plot(epochs, [acc * 100 for acc in history['train_accuracy']], 'b-',
+                   label='Train Accuracy', linewidth=2)
+    axes[0, 1].plot(epochs, [acc * 100 for acc in history['val_accuracy']], 'r-',
+                   label='Val Accuracy', linewidth=2)
+    axes[0, 1].set_xlabel('Epoch', fontsize=12)
+    axes[0, 1].set_ylabel('Accuracy (%)', fontsize=12)
+    axes[0, 1].set_title('Training and Validation Accuracy', fontsize=14, fontweight='bold')
+    axes[0, 1].legend(fontsize=10)
+    axes[0, 1].grid(True, alpha=0.3)
+
+    # Learning rate
+    axes[1, 0].plot(epochs, history['learning_rate'], 'g-', linewidth=2)
+    axes[1, 0].set_xlabel('Epoch', fontsize=12)
+    axes[1, 0].set_ylabel('Learning Rate', fontsize=12)
+    axes[1, 0].set_title('Learning Rate Schedule', fontsize=14, fontweight='bold')
+    axes[1, 0].set_yscale('log')
+    axes[1, 0].grid(True, alpha=0.3)
+
+    # Epoch times
+    axes[1, 1].plot(epochs, history['epoch_times'], 'purple', linewidth=2)
+    axes[1, 1].set_xlabel('Epoch', fontsize=12)
+    axes[1, 1].set_ylabel('Time (seconds)', fontsize=12)
+    axes[1, 1].set_title('Training Time per Epoch', fontsize=14, fontweight='bold')
+    axes[1, 1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"📈 Training curves saved to {save_path}")
+
+
+def save_training_history(model_name, history, dataset_stats, config, class_names, save_path):
+    """Save comprehensive training history and metadata"""
+    with open(save_path, 'w') as f:
+        f.write("=" * 80 + "\n")
+        f.write("TRAINING HISTORY AND METADATA\n")
+        f.write("=" * 80 + "\n\n")
+
+        # Model Information
+        f.write("MODEL INFORMATION\n")
+        f.write("-" * 80 + "\n")
+        model_info = get_model_info(model_name)
+        f.write(f"Model Architecture: {model_name}\n")
+        f.write(f"Parameters: {model_info['params']}\n")
+        f.write(f"Input Size: {model_info['input_size']}\n")
+        f.write(f"Expected Accuracy Range: {model_info['expected_acc']}\n")
+        f.write(f"Training Speed: {model_info['speed']}\n\n")
+
+        # Training Strategy
+        f.write("TRAINING STRATEGY\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"Optimizer: AdamW (lr={config['learning_rate']}, weight_decay=0.01)\n")
+        f.write(f"Scheduler: CosineAnnealingWarmRestarts (T_0=10, T_mult=2)\n")
+        f.write(f"Loss Function: {'Focal Loss (alpha=1, gamma=2)' if config['use_focal_loss'] else 'CrossEntropyLoss with class weights'}\n")
+        f.write(f"Batch Size: {config['batch_size']}\n")
+        f.write(f"Maximum Epochs: {config['num_epochs']}\n")
+        f.write(f"Early Stopping Patience: {config['early_stopping_patience']}\n")
+        f.write(f"Weighted Sampling: {config['use_balanced_sampling']}\n")
+        f.write(f"Progressive Unfreezing: 3-phase strategy\n")
+        f.write(f"  - Phase 1 (epoch 0): Classifier only\n")
+        f.write(f"  - Phase 2 (epoch 10): Unfreeze last blocks\n")
+        f.write(f"  - Phase 3 (epoch 20): Unfreeze all layers\n")
+        f.write(f"Mixed Precision Training: {'Yes (CUDA)' if config['use_amp'] else 'No'}\n\n")
+
+        # Data Augmentation
+        f.write("DATA AUGMENTATION\n")
+        f.write("-" * 80 + "\n")
+        f.write("Training Augmentations:\n")
+        f.write("  - Resize to 256x256\n")
+        f.write("  - RandomResizedCrop to 224x224 (scale=0.8-1.0)\n")
+        f.write("  - RandomHorizontalFlip (p=0.5)\n")
+        f.write("  - RandomRotation (±20°)\n")
+        f.write("  - ColorJitter (brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1)\n")
+        f.write("  - RandomGrayscale (p=0.1)\n")
+        f.write("  - GaussianBlur (kernel=3, sigma=0.1-2.0)\n")
+        f.write("  - Normalization (ImageNet stats)\n")
+        f.write("  - RandomErasing (p=0.2, scale=0.02-0.33)\n\n")
+
+        # Dataset Statistics
+        f.write("DATASET STATISTICS\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"Dataset Path: {dataset_stats['dataset_path']}\n")
+        f.write(f"Total Images: {dataset_stats['total_images']:,}\n")
+        f.write(f"Number of Classes: {dataset_stats['num_classes']}\n")
+        f.write(f"Average Images per Class: {dataset_stats['avg_images_per_class']:.1f}\n")
+        f.write(f"Min Images per Class: {dataset_stats['min_images_per_class']}\n")
+        f.write(f"Max Images per Class: {dataset_stats['max_images_per_class']}\n")
+        f.write(f"Imbalance Ratio: {dataset_stats['imbalance_ratio']:.2f}\n")
+        f.write(f"Validation Split: {config['test_split']*100:.1f}%\n\n")
+
+        f.write("Images per Class:\n")
+        for class_name in sorted(class_names):
+            count = dataset_stats['classes'].get(class_name, 0)
+            f.write(f"  {class_name:25s}: {count:5d} images\n")
+        f.write("\n")
+
+        # Training Results
+        f.write("TRAINING RESULTS\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"Total Epochs Trained: {history['total_epochs']}\n")
+        f.write(f"Best Validation Accuracy: {history['best_val_accuracy']*100:.2f}%\n")
+        f.write(f"Final Train Accuracy: {history['train_accuracy'][-1]*100:.2f}%\n")
+        f.write(f"Final Validation Accuracy: {history['val_accuracy'][-1]*100:.2f}%\n")
+        f.write(f"Final Train Loss: {history['train_loss'][-1]:.4f}\n")
+        f.write(f"Final Validation Loss: {history['val_loss'][-1]:.4f}\n")
+        f.write(f"Total Training Time: {history['total_training_time']/3600:.2f} hours\n")
+        f.write(f"Average Time per Epoch: {np.mean(history['epoch_times']):.1f} seconds\n\n")
+
+        # Epoch-by-Epoch History
+        f.write("EPOCH-BY-EPOCH HISTORY\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"{'Epoch':>6s} {'Train Loss':>12s} {'Train Acc':>11s} {'Val Loss':>10s} {'Val Acc':>9s} {'LR':>12s} {'Time(s)':>9s}\n")
+        f.write("-" * 80 + "\n")
+
+        for i in range(len(history['train_loss'])):
+            f.write(f"{i+1:6d} {history['train_loss'][i]:12.4f} {history['train_accuracy'][i]*100:10.2f}% "
+                   f"{history['val_loss'][i]:10.4f} {history['val_accuracy'][i]*100:8.2f}% "
+                   f"{history['learning_rate'][i]:12.6f} {history['epoch_times'][i]:9.1f}\n")
+
+        f.write("\n" + "=" * 80 + "\n")
+        f.write(f"Training completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("=" * 80 + "\n")
+
+    print(f"📝 Training history saved to {save_path}")
+
+
 def train_model(
     model_name,
     model,
@@ -363,11 +576,15 @@ def train_model(
     val_loader,
     class_weights,
     class_names,
+    dataset_root,
     num_epochs=100,
     learning_rate=0.001,
     early_stopping_patience=15,
+    test_split=0.15,
+    batch_size=64,
     output_dir='.',
-    use_focal_loss=False
+    use_focal_loss=False,
+    use_balanced_sampling=True
 ):
     """Train a single model with all enhancements"""
     device = get_device()
@@ -375,6 +592,18 @@ def train_model(
 
     use_amp = device.type == 'cuda'
     scaler = GradScaler() if use_amp else None
+
+    # Store configuration for saving
+    config = {
+        'learning_rate': learning_rate,
+        'batch_size': batch_size,
+        'num_epochs': num_epochs,
+        'early_stopping_patience': early_stopping_patience,
+        'test_split': test_split,
+        'use_focal_loss': use_focal_loss,
+        'use_balanced_sampling': use_balanced_sampling,
+        'use_amp': use_amp
+    }
 
     model = model.to(device)
 
@@ -493,7 +722,7 @@ def train_model(
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             epochs_without_improvement = 0
-            save_path = os.path.join(output_dir, 'best_model.pth')
+            save_path = os.path.join(output_dir, 'model.pth')
             torch.save(model.state_dict(), save_path)
             print(f"✅ New best model saved! Validation accuracy: {val_accuracy:.4f}")
 
@@ -516,6 +745,45 @@ def train_model(
     history['best_val_accuracy'] = best_val_accuracy
     history['total_training_time'] = total_training_time
     history['total_epochs'] = len(history['train_loss'])
+
+    # Load best model for final evaluation and output generation
+    best_model_path = os.path.join(output_dir, 'model.pth')
+    model.load_state_dict(torch.load(best_model_path))
+    model.eval()
+
+    # Collect dataset statistics
+    print("\n📊 Collecting dataset statistics...")
+    dataset_stats = get_dataset_statistics(dataset_root, class_names)
+
+    # Generate outputs in repository-ready format
+    print("\n📦 Generating repository-ready outputs...")
+
+    # 1. Save categories.txt
+    categories_path = os.path.join(output_dir, 'categories.txt')
+    with open(categories_path, 'w') as f:
+        for class_name in class_names:
+            f.write(f"{class_name}\n")
+    print(f"📝 Categories saved to {categories_path}")
+
+    # 2. Generate confusion matrix
+    confusion_matrix_path = os.path.join(output_dir, 'confusion_matrix.png')
+    generate_confusion_matrix(model, val_loader, class_names, device, confusion_matrix_path)
+
+    # 3. Generate training curves
+    training_curves_path = os.path.join(output_dir, 'training_curves.png')
+    generate_training_curves(history, training_curves_path)
+
+    # 4. Save comprehensive training history
+    training_history_path = os.path.join(output_dir, 'training_history.txt')
+    save_training_history(model_name, history, dataset_stats, config, class_names, training_history_path)
+
+    print(f"\n✅ All model outputs saved in repository-ready format!")
+    print(f"📁 Output directory: {output_dir}")
+    print(f"   - model.pth")
+    print(f"   - categories.txt")
+    print(f"   - confusion_matrix.png")
+    print(f"   - training_curves.png")
+    print(f"   - training_history.txt")
 
     return model, history, best_val_accuracy
 
@@ -688,16 +956,16 @@ if __name__ == '__main__':
             val_loader=val_loader,
             class_weights=class_weights,
             class_names=class_names,
+            dataset_root=DATASET_ROOT_DIR,
             num_epochs=NUM_EPOCHS,
             learning_rate=LEARNING_RATE,
             early_stopping_patience=EARLY_STOPPING_PATIENCE,
+            test_split=TEST_SPLIT,
+            batch_size=BATCH_SIZE,
             output_dir=model_output_dir,
-            use_focal_loss=USE_FOCAL_LOSS
+            use_focal_loss=USE_FOCAL_LOSS,
+            use_balanced_sampling=USE_BALANCED_SAMPLING
         )
-
-        # Save model
-        torch.save(trained_model.state_dict(),
-                  os.path.join(model_output_dir, 'final_model.pth'))
 
         # Store results
         all_results[model_name] = {
