@@ -932,6 +932,14 @@ if __name__ == '__main__':
     for i, name in enumerate(class_names):
         print(f"  {i}: {name}")
 
+    # Verify dataset integrity
+    print(f"\n⚠️  WARNING: Found {num_classes} classes in dataset.")
+    print("   ImageFolder automatically sorts classes alphabetically.")
+    print("   Ensure your dataset folders match your intended categories.")
+    print("   Class indices:")
+    for i, name in enumerate(class_names):
+        print(f"     Index {i:2d} -> {name}")
+
     # Train all models
     all_results = {}
 
