@@ -25,6 +25,8 @@ output_categories = [
   "plastic",
   "printer_cartridge",
   "tire",
+  "textile_trash",
+  "vegetation",
   "wood"
 ]
 
