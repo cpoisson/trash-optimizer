@@ -49,12 +49,12 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
-        
+
     def forward(self, inputs, targets):
         ce_loss = nn.CrossEntropyLoss(reduction='none')(inputs, targets)
         pt = torch.exp(-ce_loss)
         focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
-        
+
         if self.reduction == 'mean':
             return focal_loss.mean()
         elif self.reduction == 'sum':
@@ -112,39 +112,39 @@ def get_enhanced_transforms():
 
 def get_model(model_name, num_classes):
     """Load model based on name
-    
+
     Args:
         model_name: Name of the model architecture
         num_classes: Number of output classes
-        
+
     Returns:
         Initialized model with replaced classifier
     """
     print(f"\n🤖 Loading {model_name}...")
-    
+
     if model_name == 'efficientnet_b2':
         model = models.efficientnet_b2(weights='IMAGENET1K_V1')
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
         print(f"   Parameters: 9.2M | Input: 260x260")
-    
+
     elif model_name == 'efficientnet_v2_s':
         model = models.efficientnet_v2_s(weights='IMAGENET1K_V1')
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
         print(f"   Parameters: 21M | Input: 384x384 | Faster training!")
-    
+
     elif model_name == 'convnext_tiny':
         model = models.convnext_tiny(weights='IMAGENET1K_V1')
         model.classifier[2] = nn.Linear(model.classifier[2].in_features, num_classes)
         print(f"   Parameters: 28M | Input: 224x224 | Best accuracy!")
-    
+
     elif model_name == 'resnet50':
         model = models.resnet50(weights='IMAGENET1K_V2')
         model.fc = nn.Linear(model.fc.in_features, num_classes)
         print(f"   Parameters: 25M | Classic architecture")
-    
+
     else:
         raise ValueError(f"Unknown model: {model_name}")
-    
+
     return model
 
 
@@ -184,7 +184,7 @@ def analyze_class_distribution(dataset):
     targets = [label for _, label in dataset.dataset.imgs]
     class_counts = Counter(targets)
     class_names = dataset.get_classes()
-    
+
     print("\n📊 Class Distribution Analysis:")
     print("-" * 60)
     total_samples = len(targets)
@@ -194,7 +194,7 @@ def analyze_class_distribution(dataset):
         print(f"{class_name:30s}: {count:5d} samples ({percentage:5.2f}%)")
     print("-" * 60)
     print(f"{'Total':30s}: {total_samples:5d} samples\n")
-    
+
     return class_counts
 
 
@@ -204,13 +204,13 @@ def get_balanced_sampler(dataset, indices):
     class_counts = np.bincount(targets)
     class_weights = 1.0 / class_counts
     sample_weights = [class_weights[dataset.targets[i]] for i in indices]
-    
+
     sampler = WeightedRandomSampler(
         weights=sample_weights,
         num_samples=len(indices),
         replacement=True
     )
-    
+
     return sampler
 
 
@@ -220,14 +220,14 @@ def get_class_weights(dataset, indices):
     class_counts = np.bincount(targets)
     class_weights = 1.0 / class_counts
     class_weights = class_weights / class_weights.sum() * len(class_counts)
-    
+
     return torch.FloatTensor(class_weights)
 
 
 def get_data_loaders(root_dir, batch_size=64, test_split=0.15, use_balanced_sampling=True):
     """Create enhanced data loaders with balanced sampling"""
     train_transform, val_transform = get_enhanced_transforms()
-    
+
     train_dataset = CustomDataset(root_dir=root_dir, transform=train_transform)
     val_dataset = CustomDataset(root_dir=root_dir, transform=val_transform)
 
@@ -251,21 +251,21 @@ def get_data_loaders(root_dir, batch_size=64, test_split=0.15, use_balanced_samp
         train_sampler = get_balanced_sampler(train_dataset, train_indices)
     else:
         train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
-    
+
     val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
     class_weights = get_class_weights(train_dataset, train_indices)
 
     train_loader = DataLoader(
-        train_dataset, 
-        batch_size=batch_size, 
-        sampler=train_sampler, 
+        train_dataset,
+        batch_size=batch_size,
+        sampler=train_sampler,
         num_workers=4,
         pin_memory=True
     )
     val_loader = DataLoader(
-        val_dataset, 
-        batch_size=batch_size, 
-        sampler=val_sampler, 
+        val_dataset,
+        batch_size=batch_size,
+        sampler=val_sampler,
         num_workers=4,
         pin_memory=True
     )
@@ -293,7 +293,7 @@ def progressive_unfreeze(model, model_name, epoch, strategy='gradual'):
                     if 'fc' not in name:
                         param.requires_grad = False
             print("🔒 Phase 1: Training classifier only")
-            
+
         elif epoch == 10:
             # Phase 2: Unfreeze last layers
             if 'efficientnet' in model_name:
@@ -306,7 +306,7 @@ def progressive_unfreeze(model, model_name, epoch, strategy='gradual'):
                 for param in model.layer4.parameters():
                     param.requires_grad = True
             print("🔓 Phase 2: Unfreezing last blocks")
-            
+
         elif epoch == 20:
             # Phase 3: Unfreeze all
             for param in model.parameters():
@@ -317,27 +317,27 @@ def progressive_unfreeze(model, model_name, epoch, strategy='gradual'):
 def evaluate_per_class_metrics(model, val_loader, class_names, device):
     """Evaluate and display per-class performance metrics"""
     model.eval()
-    
+
     class_correct = {name: 0 for name in class_names}
     class_total = {name: 0 for name in class_names}
-    
+
     with torch.no_grad():
         for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
-            
+
             for label, pred in zip(labels, predicted):
                 class_name = class_names[label]
                 class_total[class_name] += 1
                 if label == pred:
                     class_correct[class_name] += 1
-    
+
     print("\n📊 Per-Class Performance Metrics:")
     print("-" * 80)
     print(f"{'Class Name':30s} {'Accuracy':>10s} {'Correct/Total':>15s}")
     print("-" * 80)
-    
+
     class_accuracies = {}
     for name in sorted(class_names):
         if class_total[name] > 0:
@@ -346,20 +346,20 @@ def evaluate_per_class_metrics(model, val_loader, class_names, device):
             print(f"{name:30s} {acc:9.2f}% {class_correct[name]:5d}/{class_total[name]:5d}")
         else:
             class_accuracies[name] = 0.0
-    
+
     print("-" * 80)
     overall_acc = 100 * sum(class_correct.values()) / sum(class_total.values())
     print(f"{'Overall Accuracy':30s} {overall_acc:9.2f}%")
     print("-" * 80 + "\n")
-    
+
     return class_accuracies
 
 
 def train_model(
     model_name,
     model,
-    num_classes, 
-    train_loader, 
+    num_classes,
+    train_loader,
     val_loader,
     class_weights,
     class_names,
@@ -372,12 +372,12 @@ def train_model(
     """Train a single model with all enhancements"""
     device = get_device()
     print(f"\n🖥️  Using device: {device}")
-    
+
     use_amp = device.type == 'cuda'
     scaler = GradScaler() if use_amp else None
-    
+
     model = model.to(device)
-    
+
     class_weights = class_weights.to(device)
     if use_focal_loss:
         criterion = FocalLoss(alpha=1, gamma=2)
@@ -398,15 +398,15 @@ def train_model(
     )
 
     history = {
-        'train_loss': [], 
-        'train_accuracy': [], 
+        'train_loss': [],
+        'train_accuracy': [],
         'val_accuracy': [],
         'val_loss': [],
         'learning_rate': [],
         'epoch_times': [],
         'per_class_accuracy': []
     }
-    
+
     best_val_accuracy = 0.0
     epochs_without_improvement = 0
     total_training_time = 0
@@ -416,9 +416,9 @@ def train_model(
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
-        
+
         progressive_unfreeze(model, model_name, epoch, strategy='gradual')
-        
+
         # Training phase
         model.train()
         running_loss = 0.0
@@ -428,7 +428,7 @@ def train_model(
         for batch_idx, (inputs, labels) in enumerate(train_loader):
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            
+
             if use_amp:
                 with autocast():
                     outputs = model(inputs)
@@ -455,7 +455,7 @@ def train_model(
         val_loss = 0.0
         correct = 0
         total = 0
-        
+
         with torch.no_grad():
             for inputs, labels in val_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
@@ -496,7 +496,7 @@ def train_model(
             save_path = os.path.join(output_dir, 'best_model.pth')
             torch.save(model.state_dict(), save_path)
             print(f"✅ New best model saved! Validation accuracy: {val_accuracy:.4f}")
-            
+
             class_accuracies = evaluate_per_class_metrics(model, val_loader, class_names, device)
             history['per_class_accuracy'].append(class_accuracies)
         else:
@@ -511,31 +511,31 @@ def train_model(
     print(f"\n✅ Training completed!")
     print(f"🏆 Best validation accuracy: {best_val_accuracy:.4f}")
     print(f"⏱️  Total training time: {total_training_time/3600:.2f} hours")
-    
+
     # Add summary statistics
     history['best_val_accuracy'] = best_val_accuracy
     history['total_training_time'] = total_training_time
     history['total_epochs'] = len(history['train_loss'])
-    
+
     return model, history, best_val_accuracy
 
 
 def plot_model_comparison(all_results, save_path):
     """Plot comparison of all trained models"""
     fig, axes = plt.subplots(2, 2, figsize=(20, 14))
-    
+
     # Plot 1: Best Validation Accuracy
     models = list(all_results.keys())
     best_accs = [all_results[m]['best_val_accuracy'] * 100 for m in models]
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
-    
+
     axes[0, 0].bar(models, best_accs, color=colors[:len(models)])
     axes[0, 0].set_ylabel('Accuracy (%)', fontsize=12)
     axes[0, 0].set_title('Best Validation Accuracy Comparison', fontsize=14, fontweight='bold')
     axes[0, 0].grid(axis='y', alpha=0.3)
     for i, acc in enumerate(best_accs):
         axes[0, 0].text(i, acc + 0.5, f'{acc:.2f}%', ha='center', fontweight='bold')
-    
+
     # Plot 2: Training Time
     training_times = [all_results[m]['total_training_time'] / 3600 for m in models]
     axes[0, 1].bar(models, training_times, color=colors[:len(models)])
@@ -544,30 +544,30 @@ def plot_model_comparison(all_results, save_path):
     axes[0, 1].grid(axis='y', alpha=0.3)
     for i, t in enumerate(training_times):
         axes[0, 1].text(i, t + 0.1, f'{t:.2f}h', ha='center', fontweight='bold')
-    
+
     # Plot 3: Validation Accuracy over Epochs
     for model_name in models:
         history = all_results[model_name]['history']
         epochs = range(1, len(history['val_accuracy']) + 1)
-        axes[1, 0].plot(epochs, [acc * 100 for acc in history['val_accuracy']], 
+        axes[1, 0].plot(epochs, [acc * 100 for acc in history['val_accuracy']],
                        label=model_name, linewidth=2)
     axes[1, 0].set_xlabel('Epoch', fontsize=12)
     axes[1, 0].set_ylabel('Validation Accuracy (%)', fontsize=12)
     axes[1, 0].set_title('Validation Accuracy over Epochs', fontsize=14, fontweight='bold')
     axes[1, 0].legend(fontsize=10)
     axes[1, 0].grid(True, alpha=0.3)
-    
+
     # Plot 4: Parameter Count vs Accuracy
     param_counts = [float(get_model_info(m)['params'].replace('M', '')) for m in models]
     axes[1, 1].scatter(param_counts, best_accs, s=200, c=colors[:len(models)], alpha=0.6)
     for i, model_name in enumerate(models):
-        axes[1, 1].annotate(model_name, (param_counts[i], best_accs[i]), 
+        axes[1, 1].annotate(model_name, (param_counts[i], best_accs[i]),
                           fontsize=10, ha='center', va='bottom')
     axes[1, 1].set_xlabel('Parameters (Millions)', fontsize=12)
     axes[1, 1].set_ylabel('Best Accuracy (%)', fontsize=12)
     axes[1, 1].set_title('Parameter Efficiency', fontsize=14, fontweight='bold')
     axes[1, 1].grid(True, alpha=0.3)
-    
+
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()
@@ -580,7 +580,7 @@ def save_comparison_report(all_results, class_names, save_path):
         f.write("=" * 80 + "\n")
         f.write("Multi-Model Training Comparison Report\n")
         f.write("=" * 80 + "\n\n")
-        
+
         f.write("Summary\n")
         f.write("-" * 80 + "\n")
         for model_name, results in all_results.items():
@@ -591,28 +591,28 @@ def save_comparison_report(all_results, class_names, save_path):
             f.write(f"  Training Time: {results['total_training_time']/3600:.2f} hours\n")
             f.write(f"  Total Epochs: {results['total_epochs']}\n")
             f.write(f"  Expected Range: {info['expected_acc']}\n")
-        
+
         f.write("\n" + "=" * 80 + "\n")
         f.write("Recommendation\n")
         f.write("-" * 80 + "\n")
-        
+
         # Find best model
         best_model = max(all_results.items(), key=lambda x: x[1]['best_val_accuracy'])
         f.write(f"\n🏆 Best Model: {best_model[0]}\n")
         f.write(f"   Accuracy: {best_model[1]['best_val_accuracy']*100:.2f}%\n")
         f.write(f"   Training Time: {best_model[1]['total_training_time']/3600:.2f} hours\n")
-        
+
         # Find fastest model
         fastest_model = min(all_results.items(), key=lambda x: x[1]['total_training_time'])
         f.write(f"\n⚡ Fastest Training: {fastest_model[0]}\n")
         f.write(f"   Training Time: {fastest_model[1]['total_training_time']/3600:.2f} hours\n")
         f.write(f"   Accuracy: {fastest_model[1]['best_val_accuracy']*100:.2f}%\n")
-    
+
     print(f"📄 Comparison report saved to {save_path}")
 
 
 if __name__ == '__main__':
-    
+
     if DATASET_ROOT_DIR is None:
         raise ValueError("DATASET_ROOT_DIR environment variable is not set")
     if RESULTS_ROOT_DIR is None:
@@ -621,7 +621,7 @@ if __name__ == '__main__':
     print("=" * 80)
     print("🗑️  Multi-Model Trash Classification Training - Version 4")
     print("=" * 80)
-    
+
     # Configuration
     BATCH_SIZE = 64
     LEARNING_RATE = 0.001
@@ -630,17 +630,17 @@ if __name__ == '__main__':
     TEST_SPLIT = 0.15
     USE_FOCAL_LOSS = False
     USE_BALANCED_SAMPLING = True
-    
+
     # Models to train and compare
     MODELS_TO_TRAIN = [
         'efficientnet_b2',      # Baseline
         'efficientnet_v2_s',    # Faster
         'convnext_tiny',        # Best accuracy
     ]
-    
+
     print(f"\n📋 Models to train: {', '.join(MODELS_TO_TRAIN)}")
     print(f"📂 Loading dataset from: {DATASET_ROOT_DIR}")
-    
+
     # Create comparison output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     comparison_dir = os.path.join(RESULTS_ROOT_DIR, f"{timestamp}_multimodel_comparison")
@@ -649,36 +649,36 @@ if __name__ == '__main__':
 
     # Get data loaders (shared across all models)
     train_loader, val_loader, class_weights = get_data_loaders(
-        DATASET_ROOT_DIR, 
-        batch_size=BATCH_SIZE, 
+        DATASET_ROOT_DIR,
+        batch_size=BATCH_SIZE,
         test_split=TEST_SPLIT,
         use_balanced_sampling=USE_BALANCED_SAMPLING
     )
-    
+
     # Get dataset info
     temp_dataset = CustomDataset(DATASET_ROOT_DIR)
     num_classes = temp_dataset.get_class_num()
     class_names = temp_dataset.get_classes()
-    
+
     print(f"\n🏷️  Training on {num_classes} classes:")
     for i, name in enumerate(class_names):
         print(f"  {i}: {name}")
 
     # Train all models
     all_results = {}
-    
+
     for model_name in MODELS_TO_TRAIN:
         print("\n" + "=" * 80)
         print(f"🚀 Training {model_name}")
         print("=" * 80)
-        
+
         # Create model-specific output directory
         model_output_dir = os.path.join(comparison_dir, model_name)
         os.makedirs(model_output_dir, exist_ok=True)
-        
+
         # Load model
         model = get_model(model_name, num_classes)
-        
+
         # Train model
         trained_model, history, best_acc = train_model(
             model_name=model_name,
@@ -694,11 +694,11 @@ if __name__ == '__main__':
             output_dir=model_output_dir,
             use_focal_loss=USE_FOCAL_LOSS
         )
-        
+
         # Save model
-        torch.save(trained_model.state_dict(), 
+        torch.save(trained_model.state_dict(),
                   os.path.join(model_output_dir, 'final_model.pth'))
-        
+
         # Store results
         all_results[model_name] = {
             'history': history,
@@ -706,7 +706,7 @@ if __name__ == '__main__':
             'total_training_time': history['total_training_time'],
             'total_epochs': history['total_epochs']
         }
-        
+
         print(f"\n✅ {model_name} training completed!")
         print(f"   Best accuracy: {best_acc*100:.2f}%")
         print(f"   Training time: {history['total_training_time']/3600:.2f} hours")
@@ -715,13 +715,13 @@ if __name__ == '__main__':
     print("\n" + "=" * 80)
     print("📊 Generating Model Comparison")
     print("=" * 80)
-    
-    plot_model_comparison(all_results, 
+
+    plot_model_comparison(all_results,
                          os.path.join(comparison_dir, 'model_comparison.png'))
-    
+
     save_comparison_report(all_results, class_names,
                           os.path.join(comparison_dir, 'comparison_report.txt'))
-    
+
     # Save results as JSON
     results_json = {
         model: {
@@ -732,26 +732,26 @@ if __name__ == '__main__':
         }
         for model, results in all_results.items()
     }
-    
+
     with open(os.path.join(comparison_dir, 'results.json'), 'w') as f:
         json.dump(results_json, f, indent=2)
-    
+
     # Print final summary
     print("\n" + "=" * 80)
     print("🏁 Multi-Model Training Summary")
     print("=" * 80)
-    
+
     best_model = max(all_results.items(), key=lambda x: x[1]['best_val_accuracy'])
     fastest_model = min(all_results.items(), key=lambda x: x[1]['total_training_time'])
-    
+
     print(f"\n🏆 Best Model: {best_model[0]}")
     print(f"   Accuracy: {best_model[1]['best_val_accuracy']*100:.2f}%")
     print(f"   Time: {best_model[1]['total_training_time']/3600:.2f} hours")
-    
+
     print(f"\n⚡ Fastest Training: {fastest_model[0]}")
     print(f"   Time: {fastest_model[1]['total_training_time']/3600:.2f} hours")
     print(f"   Accuracy: {fastest_model[1]['best_val_accuracy']*100:.2f}%")
-    
+
     print(f"\n📁 All results saved to: {comparison_dir}")
     print("\n" + "=" * 80)
     print("✅ Multi-model training completed successfully!")
