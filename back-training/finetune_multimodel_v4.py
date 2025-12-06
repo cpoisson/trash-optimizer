@@ -22,6 +22,8 @@ from torch.cuda.amp import autocast, GradScaler
 from pathlib import Path
 import time
 import os
+import sys
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
@@ -35,6 +37,33 @@ import json
 load_dotenv()
 DATASET_ROOT_DIR = os.getenv('DATASET_ROOT_DIR')
 RESULTS_ROOT_DIR = os.getenv('RESULTS_ROOT_DIR')
+
+
+def setup_logging(output_dir, model_name='training'):
+    """Setup logging to both file and console"""
+    log_file = os.path.join(output_dir, f'{model_name}_training.log')
+
+    # Create logger
+    logger = logging.getLogger(model_name)
+    logger.setLevel(logging.INFO)
+    logger.handlers = []  # Clear existing handlers
+
+    # File handler
+    file_handler = logging.FileHandler(log_file, mode='w')
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
 
 
 def get_device():
@@ -568,6 +597,75 @@ def save_training_history(model_name, history, dataset_stats, config, class_name
     print(f"📝 Training history saved to {save_path}")
 
 
+def save_training_parameters(model_name, config, dataset_stats, class_names, save_path):
+    """Save concise training parameters file"""
+    with open(save_path, 'w') as f:
+        f.write("=" * 80 + "\n")
+        f.write("TRAINING PARAMETERS\n")
+        f.write("=" * 80 + "\n\n")
+
+        f.write(f"Model Architecture: {model_name}\n")
+        model_info = get_model_info(model_name)
+        f.write(f"Parameters: {model_info['params']}\n")
+        f.write(f"Input Size: {model_info['input_size']}\n\n")
+
+        f.write("HYPERPARAMETERS\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"Batch Size: {config['batch_size']}\n")
+        f.write(f"Learning Rate: {config['learning_rate']}\n")
+        f.write(f"Max Epochs: {config['num_epochs']}\n")
+        f.write(f"Early Stopping Patience: {config['early_stopping_patience']}\n")
+        f.write(f"Validation Split: {config['test_split']*100:.1f}%\n")
+        f.write(f"Optimizer: AdamW (weight_decay=0.01, betas=(0.9, 0.999))\n")
+        f.write(f"Scheduler: CosineAnnealingWarmRestarts (T_0=10, T_mult=2, eta_min=1e-6)\n")
+        f.write(f"Loss Function: {'Focal Loss (alpha=1, gamma=2)' if config['use_focal_loss'] else 'CrossEntropyLoss with class weights'}\n")
+        f.write(f"Weighted Sampling: {config['use_balanced_sampling']}\n")
+        f.write(f"Mixed Precision (AMP): {config['use_amp']}\n\n")
+
+        f.write("PROGRESSIVE UNFREEZING STRATEGY\n")
+        f.write("-" * 80 + "\n")
+        f.write("Phase 1 (epoch 0): Train classifier only\n")
+        f.write("Phase 2 (epoch 10): Unfreeze last blocks\n")
+        f.write("Phase 3 (epoch 20): Unfreeze all layers\n\n")
+
+        f.write("DATA AUGMENTATION\n")
+        f.write("-" * 80 + "\n")
+        f.write("Training:\n")
+        f.write("  - Resize(256, 256)\n")
+        f.write("  - RandomResizedCrop(224, scale=(0.8, 1.0))\n")
+        f.write("  - RandomHorizontalFlip(p=0.5)\n")
+        f.write("  - RandomRotation(±20°)\n")
+        f.write("  - ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1)\n")
+        f.write("  - RandomGrayscale(p=0.1)\n")
+        f.write("  - GaussianBlur(kernel=3, sigma=(0.1, 2.0))\n")
+        f.write("  - Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])\n")
+        f.write("  - RandomErasing(p=0.2, scale=(0.02, 0.33))\n\n")
+        f.write("Validation:\n")
+        f.write("  - Resize(256, 256)\n")
+        f.write("  - CenterCrop(224)\n")
+        f.write("  - Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])\n\n")
+
+        f.write("DATASET\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"Path: {dataset_stats['dataset_path']}\n")
+        f.write(f"Total Images: {dataset_stats['total_images']:,}\n")
+        f.write(f"Number of Classes: {dataset_stats['num_classes']}\n")
+        f.write(f"Min/Max/Avg per Class: {dataset_stats['min_images_per_class']}/{dataset_stats['max_images_per_class']}/{dataset_stats['avg_images_per_class']:.0f}\n")
+        f.write(f"Imbalance Ratio: {dataset_stats['imbalance_ratio']:.2f}\n\n")
+
+        f.write("CLASSES\n")
+        f.write("-" * 80 + "\n")
+        for i, class_name in enumerate(sorted(class_names)):
+            count = dataset_stats['classes'].get(class_name, 0)
+            f.write(f"{i:2d}. {class_name:25s} ({count:4d} images)\n")
+
+        f.write("\n" + "=" * 80 + "\n")
+        f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("=" * 80 + "\n")
+
+    print(f"📋 Training parameters saved to {save_path}")
+
+
 def train_model(
     model_name,
     model,
@@ -584,10 +682,17 @@ def train_model(
     batch_size=64,
     output_dir='.',
     use_focal_loss=False,
-    use_balanced_sampling=True
+    use_balanced_sampling=True,
+    logger=None
 ):
     """Train a single model with all enhancements"""
     device = get_device()
+
+    # Setup logger if not provided
+    if logger is None:
+        logger = setup_logging(output_dir, model_name)
+
+    logger.info(f"Using device: {device}")
     print(f"\n🖥️  Using device: {device}")
 
     use_amp = device.type == 'cuda'
@@ -607,12 +712,24 @@ def train_model(
 
     model = model.to(device)
 
+    logger.info(f"Model: {model_name}")
+    logger.info(f"Number of classes: {num_classes}")
+    logger.info(f"Batch size: {batch_size}")
+    logger.info(f"Learning rate: {learning_rate}")
+    logger.info(f"Max epochs: {num_epochs}")
+    logger.info(f"Early stopping patience: {early_stopping_patience}")
+    logger.info(f"Test split: {test_split}")
+    logger.info(f"Use balanced sampling: {use_balanced_sampling}")
+    logger.info(f"Use AMP: {use_amp}")
+
     class_weights = class_weights.to(device)
     if use_focal_loss:
         criterion = FocalLoss(alpha=1, gamma=2)
+        logger.info("Using Focal Loss")
         print("📉 Using Focal Loss")
     else:
         criterion = nn.CrossEntropyLoss(weight=class_weights)
+        logger.info("Using Weighted Cross Entropy Loss")
         print("📉 Using Weighted Cross Entropy Loss")
 
     optimizer = optim.AdamW(
@@ -640,6 +757,8 @@ def train_model(
     epochs_without_improvement = 0
     total_training_time = 0
 
+    logger.info(f"Starting training for {num_epochs} epochs")
+    logger.info(f"Early stopping patience: {early_stopping_patience} epochs")
     print(f"\n🚀 Starting training for {num_epochs} epochs...")
     print(f"⏱️  Early stopping patience: {early_stopping_patience} epochs\n")
 
@@ -711,20 +830,24 @@ def train_model(
         history['epoch_times'].append(epoch_time)
         total_training_time += epoch_time
 
-        print(f"Epoch [{epoch+1:3d}/{num_epochs}] "
-              f"| Train Loss: {epoch_loss:.4f} "
-              f"| Train Acc: {train_accuracy:.4f} "
-              f"| Val Loss: {val_loss:.4f} "
-              f"| Val Acc: {val_accuracy:.4f} "
-              f"| LR: {current_lr:.6f} "
-              f"| Time: {epoch_time:.1f}s")
+        epoch_log = (f"Epoch [{epoch+1:3d}/{num_epochs}] "
+                    f"| Train Loss: {epoch_loss:.4f} "
+                    f"| Train Acc: {train_accuracy:.4f} "
+                    f"| Val Loss: {val_loss:.4f} "
+                    f"| Val Acc: {val_accuracy:.4f} "
+                    f"| LR: {current_lr:.6f} "
+                    f"| Time: {epoch_time:.1f}s")
+        print(epoch_log)
+        logger.info(epoch_log)
 
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             epochs_without_improvement = 0
             save_path = os.path.join(output_dir, 'model.pth')
             torch.save(model.state_dict(), save_path)
-            print(f"✅ New best model saved! Validation accuracy: {val_accuracy:.4f}")
+            best_msg = f"New best model saved! Validation accuracy: {val_accuracy:.4f}"
+            print(f"✅ {best_msg}")
+            logger.info(best_msg)
 
             class_accuracies = evaluate_per_class_metrics(model, val_loader, class_names, device)
             history['per_class_accuracy'].append(class_accuracies)
@@ -733,13 +856,16 @@ def train_model(
             history['per_class_accuracy'].append({})
 
         if epochs_without_improvement >= early_stopping_patience:
-            print(f"\n⏹️  Early stopping triggered after {epoch+1} epochs")
-            print(f"🏆 Best validation accuracy: {best_val_accuracy:.4f}")
+            early_stop_msg = f"Early stopping triggered after {epoch+1} epochs. Best validation accuracy: {best_val_accuracy:.4f}"
+            print(f"\n⏹️  {early_stop_msg}")
+            logger.info(early_stop_msg)
             break
 
+    completion_msg = f"Training completed! Best validation accuracy: {best_val_accuracy:.4f}, Total training time: {total_training_time/3600:.2f} hours"
     print(f"\n✅ Training completed!")
     print(f"🏆 Best validation accuracy: {best_val_accuracy:.4f}")
     print(f"⏱️  Total training time: {total_training_time/3600:.2f} hours")
+    logger.info(completion_msg)
 
     # Add summary statistics
     history['best_val_accuracy'] = best_val_accuracy
@@ -753,29 +879,38 @@ def train_model(
 
     # Collect dataset statistics
     print("\n📊 Collecting dataset statistics...")
+    logger.info("Collecting dataset statistics")
     dataset_stats = get_dataset_statistics(dataset_root, class_names)
 
     # Generate outputs in repository-ready format
     print("\n📦 Generating repository-ready outputs...")
-
-    # 1. Save categories.txt
+    logger.info("Generating repository-ready outputs")    # 1. Save categories.txt
     categories_path = os.path.join(output_dir, 'categories.txt')
     with open(categories_path, 'w') as f:
         for class_name in class_names:
             f.write(f"{class_name}\n")
     print(f"📝 Categories saved to {categories_path}")
+    logger.info(f"Categories saved to {categories_path}")
 
     # 2. Generate confusion matrix
     confusion_matrix_path = os.path.join(output_dir, 'confusion_matrix.png')
     generate_confusion_matrix(model, val_loader, class_names, device, confusion_matrix_path)
+    logger.info(f"Confusion matrix saved to {confusion_matrix_path}")
 
     # 3. Generate training curves
     training_curves_path = os.path.join(output_dir, 'training_curves.png')
     generate_training_curves(history, training_curves_path)
+    logger.info(f"Training curves saved to {training_curves_path}")
 
     # 4. Save comprehensive training history
     training_history_path = os.path.join(output_dir, 'training_history.txt')
     save_training_history(model_name, history, dataset_stats, config, class_names, training_history_path)
+    logger.info(f"Training history saved to {training_history_path}")
+
+    # 5. Save training parameters
+    training_params_path = os.path.join(output_dir, 'training_parameters.txt')
+    save_training_parameters(model_name, config, dataset_stats, class_names, training_params_path)
+    logger.info(f"Training parameters saved to {training_params_path}")
 
     print(f"\n✅ All model outputs saved in repository-ready format!")
     print(f"📁 Output directory: {output_dir}")
@@ -784,6 +919,9 @@ def train_model(
     print(f"   - confusion_matrix.png")
     print(f"   - training_curves.png")
     print(f"   - training_history.txt")
+    print(f"   - training_parameters.txt")
+    print(f"   - {model_name}_training.log")
+    logger.info(f"All outputs saved to {output_dir}")
 
     return model, history, best_val_accuracy
 
@@ -915,6 +1053,22 @@ if __name__ == '__main__':
     os.makedirs(comparison_dir, exist_ok=True)
     print(f"📁 Comparison directory: {comparison_dir}")
 
+    # Setup main logger for overall training
+    main_logger = setup_logging(comparison_dir, 'multimodel_training')
+    main_logger.info("="*80)
+    main_logger.info("Multi-Model Trash Classification Training - Version 4")
+    main_logger.info("="*80)
+    main_logger.info(f"Models to train: {', '.join(MODELS_TO_TRAIN)}")
+    main_logger.info(f"Dataset: {DATASET_ROOT_DIR}")
+    main_logger.info(f"Output directory: {comparison_dir}")
+    main_logger.info(f"Batch size: {BATCH_SIZE}")
+    main_logger.info(f"Learning rate: {LEARNING_RATE}")
+    main_logger.info(f"Max epochs: {NUM_EPOCHS}")
+    main_logger.info(f"Early stopping patience: {EARLY_STOPPING_PATIENCE}")
+    main_logger.info(f"Test split: {TEST_SPLIT}")
+    main_logger.info(f"Use focal loss: {USE_FOCAL_LOSS}")
+    main_logger.info(f"Use balanced sampling: {USE_BALANCED_SAMPLING}")
+
     # Get data loaders (shared across all models)
     train_loader, val_loader, class_weights = get_data_loaders(
         DATASET_ROOT_DIR,
@@ -952,6 +1106,8 @@ if __name__ == '__main__':
         model_output_dir = os.path.join(comparison_dir, model_name)
         os.makedirs(model_output_dir, exist_ok=True)
 
+        main_logger.info(f"Starting training for {model_name}")
+
         # Load model
         model = get_model(model_name, num_classes)
 
@@ -972,7 +1128,8 @@ if __name__ == '__main__':
             batch_size=BATCH_SIZE,
             output_dir=model_output_dir,
             use_focal_loss=USE_FOCAL_LOSS,
-            use_balanced_sampling=USE_BALANCED_SAMPLING
+            use_balanced_sampling=USE_BALANCED_SAMPLING,
+            logger=None  # Let train_model create its own logger
         )
 
         # Store results
@@ -983,20 +1140,25 @@ if __name__ == '__main__':
             'total_epochs': history['total_epochs']
         }
 
+        result_msg = f"{model_name} training completed! Best accuracy: {best_acc*100:.2f}%, Training time: {history['total_training_time']/3600:.2f} hours"
         print(f"\n✅ {model_name} training completed!")
         print(f"   Best accuracy: {best_acc*100:.2f}%")
         print(f"   Training time: {history['total_training_time']/3600:.2f} hours")
+        main_logger.info(result_msg)
 
     # Generate comparison visualizations
     print("\n" + "=" * 80)
     print("📊 Generating Model Comparison")
     print("=" * 80)
+    main_logger.info("Generating model comparison visualizations")
 
     plot_model_comparison(all_results,
                          os.path.join(comparison_dir, 'model_comparison.png'))
+    main_logger.info("Model comparison plot saved")
 
     save_comparison_report(all_results, class_names,
                           os.path.join(comparison_dir, 'comparison_report.txt'))
+    main_logger.info("Comparison report saved")
 
     # Save results as JSON
     results_json = {
@@ -1009,8 +1171,10 @@ if __name__ == '__main__':
         for model, results in all_results.items()
     }
 
-    with open(os.path.join(comparison_dir, 'results.json'), 'w') as f:
+    results_path = os.path.join(comparison_dir, 'results.json')
+    with open(results_path, 'w') as f:
         json.dump(results_json, f, indent=2)
+    main_logger.info(f"Results JSON saved to {results_path}")
 
     # Print final summary
     print("\n" + "=" * 80)
@@ -1032,3 +1196,23 @@ if __name__ == '__main__':
     print("\n" + "=" * 80)
     print("✅ Multi-model training completed successfully!")
     print("=" * 80)
+
+    main_logger.info(f"All results saved to: {comparison_dir}")
+    main_logger.info("Multi-model training completed successfully!")
+    main_logger.info("="*80)
+
+    # List all generated files
+    main_logger.info("Generated files:")
+    main_logger.info("  - multimodel_training.log (this file)")
+    main_logger.info("  - model_comparison.png")
+    main_logger.info("  - comparison_report.txt")
+    main_logger.info("  - results.json")
+    for model_name in MODELS_TO_TRAIN:
+        main_logger.info(f"  - {model_name}/:")
+        main_logger.info(f"      - model.pth")
+        main_logger.info(f"      - categories.txt")
+        main_logger.info(f"      - confusion_matrix.png")
+        main_logger.info(f"      - training_curves.png")
+        main_logger.info(f"      - training_history.txt")
+        main_logger.info(f"      - training_parameters.txt")
+        main_logger.info(f"      - {model_name}_training.log")
