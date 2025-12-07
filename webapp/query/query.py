@@ -26,7 +26,7 @@ def get_loc(list_trash = None):
             Longitude,
             Latitude,
             '{category}' AS Trash_class
-        FROM `{GCP_PROJECT}.{GCP_DATASET}.trash_collection_points_complete`
+        FROM `{GCP_PROJECT}.{GCP_DATASET}.trash_collection_points`
         WHERE {category_mapping[category]}
         AND Longitude IS NOT NULL
         AND Latitude IS NOT NULL

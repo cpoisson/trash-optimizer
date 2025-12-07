@@ -1,23 +1,27 @@
 import pandas as pd
 
 DUMMY_PREDICT_RESULT = [
-    {"class": "food_organics", "confidence": 0.8},
-    {"class": "cardboard", "confidence": 0.7},
-    {"class": "glass", "confidence": 0.9},
-    {"class": "metal", "confidence": 0.6},
-    {"class": "paper", "confidence": 0.8},
-    {"class": "plastic", "confidence": 0.7},
-    {"class": "textile_trash", "confidence": 0.75},
-    {"class": "vegetation", "confidence": 0.85},
-    {"class": "miscellaneous_trash", "confidence": 0.9},
-    {"class": "mirror", "confidence": 0.8},
-    {"class": "car_battery", "confidence": 0.7},
-    {"class": "neon", "confidence": 0.9},
-    {"class": "pharmacy", "confidence": 0.6},
-    {"class": "tire", "confidence": 0.65},
-    {"class": "printer_cartridge", "confidence": 0.7},
-    {"class": "wood", "confidence": 0.8},
-    {"class": "ressourcerie", "confidence": 0.9}
+    {"class": "food_organics",        "confidence": 0.80},
+    {"class": "cardboard",            "confidence": 0.70},
+    {"class": "glass",                "confidence": 0.90},
+    {"class": "metal",                "confidence": 0.60},
+    {"class": "paper",                "confidence": 0.80},
+    {"class": "plastic",              "confidence": 0.70},
+    {"class": "textile_trash",        "confidence": 0.75},
+    {"class": "vegetation",           "confidence": 0.85},
+    {"class": "miscellaneous_trash",  "confidence": 0.90},
+    {"class": "mirror",               "confidence": 0.80},
+    {"class": "car_battery",          "confidence": 0.70},
+    {"class": "neon",                 "confidence": 0.90},
+    {"class": "pharmacy",             "confidence": 0.60},
+    {"class": "tire",                 "confidence": 0.65},
+    {"class": "printer_cartridge",    "confidence": 0.70},
+    {"class": "wood",                 "confidence": 0.80},
+    {"class": "ressourcerie",         "confidence": 0.90},
+
+    # Classes présentes dans ton mapping mais absentes de ta liste
+    {"class": "light_bulb",           "confidence": 0.85},
+    # {"class": "battery",              "confidence": 0.88}
 ]
 
 DUMMY_DROP_OFF = {"lat": 47.2138, "lon": -1.5487}
