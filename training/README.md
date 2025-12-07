@@ -255,28 +255,3 @@ ls -lht $RESULTS_ROOT_DIR
 # Remove old results (be careful!)
 rm -rf $RESULTS_ROOT_DIR/YYYYMMDD_*
 ```
-
-## 🎯 Benefits of This Architecture
-
-✅ **Zero code duplication** - all logic in reusable modules
-✅ **Easy to extend** - add models in one place
-✅ **Flexible CLI** - train with any parameters
-✅ **Makefile convenience** - simple commands
-✅ **Type-safe** - clear interfaces
-✅ **Testable** - modular components
-✅ **Maintainable** - organized structure
-
-## 📝 Migration Notes
-
-Old scripts (`finetune_*.py`) are kept for reference but are no longer needed. All functionality is now in the modular system.
-
-To migrate from old scripts:
-```bash
-# Old way
-python finetune_multimodel_v4.py
-
-# New way
-python train.py --model efficientnet_b0
-# or
-make train-efficientnet-b0
-```
