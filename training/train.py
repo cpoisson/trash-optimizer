@@ -19,6 +19,11 @@ from utils.visualization import (
     save_training_history,
     save_class_mapping
 )
+from utils.benchmarking import (
+    benchmark_model,
+    print_benchmark_summary,
+    save_benchmark_results
+)
 
 
 def parse_args():
@@ -185,20 +190,31 @@ def train_model(args):
         device=device
     )
 
+    # Benchmark model (inference speed & memory)
+    best_model_path = output_dir / 'best_model.pth'
+    benchmark_results = benchmark_model(
+        model=trainer.model,
+        model_path=best_model_path,
+        input_shape=(1, 3, 224, 224),
+        device=device
+    )
+    print_benchmark_summary(benchmark_results)
+
     # Save all outputs
     print("\n💾 Saving results...")
-    save_class_mapping(class_to_idx, output_dir / 'categories.txt')
+    save_class_mapping(class_to_idx, output_dir / 'class_mapping.txt')
     save_training_history(history, output_dir / 'training_history.txt')
     plot_training_curves(history, config['model_name'], output_dir / 'training_curves.png')
     plot_confusion_matrix(all_labels, all_preds, class_names, config['model_name'],
                          output_dir / 'confusion_matrix.png')
     save_classification_report(all_labels, all_preds, class_names,
                               output_dir / 'classification_report.txt')
+    save_benchmark_results(benchmark_results, output_dir / 'benchmark_results.json')
 
     print(f"\n✅ Training complete! Results saved to: {output_dir}")
     print(f"🏆 Best validation accuracy: {trainer.best_val_accuracy:.4f}\n")
 
-    return trainer.best_val_accuracy
+    return trainer.best_val_accuracy, benchmark_results
 
 
 def main():
@@ -206,7 +222,7 @@ def main():
     args = parse_args()
 
     try:
-        best_acc = train_model(args)
+        best_acc, _ = train_model(args)
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ Error: {e}", file=sys.stderr)
