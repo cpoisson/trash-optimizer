@@ -16,29 +16,13 @@ import numpy as np
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 
-# Fine-tuning will based on https://www.kaggle.com/datasets/joebeachcapital/realwaste dataset
-# Classifying images into the following waste categories:
-# "Cardboard", "Food Organics", "Glass", "Metal",
-# "Miscellaneous Trash", "Paper", "Plastic",
-# "Textile Trash", "Vegetation"
 
 # Get DATASET_ROOT_DIR from environment variable DATASET_ROOT_DIR
 load_dotenv()  # Load environment variables from .env file if present
 DATASET_ROOT_DIR = os.getenv('DATASET_ROOT_DIR')
 RESULTS_ROOT_DIR = os.getenv('RESULTS_ROOT_DIR')
 
-# The dataset is not organized into train/val/test splits, so we will create our own splits.
-# The current is organized as follows:
-# root
-# ├── Cardboard
-# ├── Food Organics
-# ├── Glass
-# ├── Metal
-# ├── Miscellaneous Trash
-# ├── Paper
-# ├── Plastic
-# ├── Textile Trash
-# └── Vegetation
+
 
 def get_device():
     '''Get the available device (CUDA, MPS, or CPU) for PyTorch operations'''
