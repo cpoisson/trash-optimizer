@@ -187,7 +187,7 @@ class Trainer:
 
         return self.history
 
-    def save_final_model(self, filename='final_model.pth'):
+    def save_final_model(self, filename='model.pth'):
         """Save the final model state.
 
         Args:
@@ -195,4 +195,10 @@ class Trainer:
         """
         save_path = self.output_dir / filename
         torch.save(self.model.state_dict(), save_path)
+
+        # Delete best model file to avoid confusion
+        best_model_path = self.output_dir / 'best_model.pth'
+        if best_model_path.exists():
+            best_model_path.unlink()
+
         print(f"💾 Final model saved to {save_path}")
