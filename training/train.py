@@ -187,7 +187,7 @@ def train_model(args):
 
     # Save all outputs
     print("\n💾 Saving results...")
-    save_class_mapping(class_to_idx, output_dir / 'class_mapping.txt')
+    save_class_mapping(class_to_idx, output_dir / 'categories.txt')
     save_training_history(history, output_dir / 'training_history.txt')
     plot_training_curves(history, config['model_name'], output_dir / 'training_curves.png')
     plot_confusion_matrix(all_labels, all_preds, class_names, config['model_name'],
