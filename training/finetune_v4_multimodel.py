@@ -5,7 +5,7 @@ This script combines the best practices from the simple approach with multi-mode
 Key features:
 - Moderate data augmentation (preserves natural textures)
 - Conservative learning rates for stable training
-- Support for multiple architectures (EfficientNet-B0/B2, ConvNeXt-Tiny, ResNet50)
+- Support for multiple architectures (EfficientNet-B0/B2, EfficientNetV2-S/M, ConvNeXt-Tiny, ResNet50)
 - Per-class performance metrics
 - Comprehensive comparison reports
 """
@@ -159,7 +159,7 @@ def get_model(model_name, num_classes):
     """Get a pre-trained model and modify it for custom number of classes
 
     Args:
-        model_name: One of 'efficientnet_b0', 'efficientnet_b2', 'convnext_tiny', 'resnet50'
+        model_name: One of 'efficientnet_b0', 'efficientnet_b2', 'efficientnet_v2_s', 'efficientnet_v2_m', 'convnext_tiny', 'resnet50'
         num_classes: Number of output classes
 
     Returns:
@@ -170,19 +170,36 @@ def get_model(model_name, num_classes):
         # Freeze most layers initially
         for param in model.features[:-3].parameters():
             param.requires_grad = False
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+        in_features = model.classifier[1].in_features
+        model.classifier[1] = nn.Linear(in_features, num_classes)
 
     elif model_name == 'efficientnet_b2':
         model = models.efficientnet_b2(weights='IMAGENET1K_V1')
         for param in model.features[:-3].parameters():
             param.requires_grad = False
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+        in_features = model.classifier[1].in_features
+        model.classifier[1] = nn.Linear(in_features, num_classes)
+
+    elif model_name == 'efficientnet_v2_s':
+        model = models.efficientnet_v2_s(weights='IMAGENET1K_V1')
+        for param in model.features[:-3].parameters():
+            param.requires_grad = False
+        in_features = model.classifier[1].in_features
+        model.classifier[1] = nn.Linear(in_features, num_classes)
+
+    elif model_name == 'efficientnet_v2_m':
+        model = models.efficientnet_v2_m(weights='IMAGENET1K_V1')
+        for param in model.features[:-3].parameters():
+            param.requires_grad = False
+        in_features = model.classifier[1].in_features
+        model.classifier[1] = nn.Linear(in_features, num_classes)
 
     elif model_name == 'convnext_tiny':
         model = models.convnext_tiny(weights='IMAGENET1K_V1')
         for param in model.features[:-2].parameters():
             param.requires_grad = False
-        model.classifier[2] = nn.Linear(model.classifier[2].in_features, num_classes)
+        in_features = model.classifier[2].in_features
+        model.classifier[2] = nn.Linear(in_features, num_classes)
 
     elif model_name == 'resnet50':
         model = models.resnet50(weights='IMAGENET1K_V2')
@@ -578,7 +595,7 @@ if __name__ == '__main__':
     print("=" * 80)
 
     # Configuration
-    MODELS_TO_TRAIN = ['efficientnet_b0', 'efficientnet_b2', 'convnext_tiny']
+    MODELS_TO_TRAIN = ['efficientnet_b0', 'efficientnet_b2', 'efficientnet_v2_s', 'convnext_tiny']
     BATCH_SIZE = 32
     LEARNING_RATE = 0.0001
     NUM_EPOCHS = 50
