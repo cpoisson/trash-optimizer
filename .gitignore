@@ -29,3 +29,7 @@ ENV/
 *~
 *.csv
 *.xlsx
+
+# github & github copilot instructions
+.copilot-instructions.md
+.github
