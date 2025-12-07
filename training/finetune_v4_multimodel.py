@@ -35,8 +35,8 @@ RESULTS_ROOT_DIR = os.getenv('RESULTS_ROOT_DIR')
 
 def get_device():
     """Get the available device (CUDA, MPS, or CPU) for PyTorch operations"""
-    return torch.device("cuda" if torch.cuda.is_available() 
-                       else "mps" if torch.backends.mps.is_available() 
+    return torch.device("cuda" if torch.cuda.is_available()
+                       else "mps" if torch.backends.mps.is_available()
                        else "cpu")
 
 
@@ -105,7 +105,7 @@ def get_data_transforms():
 
 def get_data_loaders(root_dir, batch_size=32, test_split=0.25):
     """Create data loaders for training and validation
-    
+
     Args:
         root_dir: Root directory containing the dataset
         batch_size: Batch size for training
@@ -157,11 +157,11 @@ def get_data_loaders(root_dir, batch_size=32, test_split=0.25):
 
 def get_model(model_name, num_classes):
     """Get a pre-trained model and modify it for custom number of classes
-    
+
     Args:
         model_name: One of 'efficientnet_b0', 'efficientnet_b2', 'convnext_tiny', 'resnet50'
         num_classes: Number of output classes
-    
+
     Returns:
         model: Modified PyTorch model
     """
@@ -171,19 +171,19 @@ def get_model(model_name, num_classes):
         for param in model.features[:-3].parameters():
             param.requires_grad = False
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
-        
+
     elif model_name == 'efficientnet_b2':
         model = models.efficientnet_b2(weights='IMAGENET1K_V1')
         for param in model.features[:-3].parameters():
             param.requires_grad = False
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
-        
+
     elif model_name == 'convnext_tiny':
         model = models.convnext_tiny(weights='IMAGENET1K_V1')
         for param in model.features[:-2].parameters():
             param.requires_grad = False
         model.classifier[2] = nn.Linear(model.classifier[2].in_features, num_classes)
-        
+
     elif model_name == 'resnet50':
         model = models.resnet50(weights='IMAGENET1K_V2')
         # Freeze early layers
@@ -192,10 +192,10 @@ def get_model(model_name, num_classes):
         for param in model.layer2.parameters():
             param.requires_grad = False
         model.fc = nn.Linear(model.fc.in_features, num_classes)
-        
+
     else:
         raise ValueError(f"Unsupported model: {model_name}")
-    
+
     return model
 
 
@@ -259,7 +259,7 @@ def fine_tune_model(
     output_dir='.'
 ):
     """Fine-tune a model on the custom dataset
-    
+
     Args:
         model_name: Name of the model architecture
         num_classes: Number of output classes
@@ -295,7 +295,7 @@ def fine_tune_model(
         'epoch_times': [],
         'learning_rates': []
     }
-    
+
     best_val_accuracy = 0.0
     epochs_without_improvement = 0
     training_start = time.time()
@@ -379,13 +379,13 @@ def fine_tune_model(
             break
 
     training_time = time.time() - training_start
-    
+
     # Load best model for final evaluation
     model.load_state_dict(torch.load(os.path.join(output_dir, 'best_model.pth')))
-    
+
     print(f"\n✅ Training completed in {training_time/60:.1f} minutes")
     print(f"🏆 Best validation accuracy: {best_val_accuracy:.4f}")
-    
+
     # Evaluate per-class metrics
     class_accuracies, all_labels, all_preds = evaluate_per_class_metrics(
         model, val_loader, class_names, device
@@ -492,9 +492,9 @@ def plot_model_comparison(results, path='model_comparison.png'):
     """Plot comparison of all models"""
     models = list(results.keys())
     accuracies = [results[m]['best_accuracy'] for m in models]
-    
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
-    
+
     # Plot 1: Overall accuracy comparison
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
     bars = ax1.bar(models, accuracies, color=colors[:len(models)])
@@ -502,30 +502,30 @@ def plot_model_comparison(results, path='model_comparison.png'):
     ax1.set_title('Model Comparison - Overall Accuracy', fontsize=14, fontweight='bold')
     ax1.set_ylim([0, 1])
     ax1.grid(True, alpha=0.3, axis='y')
-    
+
     # Add value labels on bars
     for bar, acc in zip(bars, accuracies):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height,
                 f'{acc:.4f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
-    
+
     # Plot 2: Per-class accuracy heatmap for problematic classes
     problematic_classes = ['wood', 'vegetation', 'mirror', 'textile_trash']
     available_classes = [c for c in problematic_classes if c in results[models[0]]['class_accuracies']]
-    
+
     if available_classes:
         heatmap_data = []
         for model in models:
             row = [results[model]['class_accuracies'].get(c, 0) for c in available_classes]
             heatmap_data.append(row)
-        
+
         sns.heatmap(heatmap_data, annot=True, fmt='.1f', cmap='RdYlGn',
                    xticklabels=available_classes, yticklabels=models,
                    vmin=0, vmax=100, ax=ax2)
         ax2.set_title('Per-Class Accuracy (%) - Focus Classes', fontsize=14, fontweight='bold')
         ax2.set_xlabel('Class', fontsize=12)
         ax2.set_ylabel('Model', fontsize=12)
-    
+
     plt.tight_layout()
     plt.savefig(path, dpi=300, bbox_inches='tight')
     plt.close()
@@ -537,33 +537,33 @@ def save_comparison_report(results, path='comparison_report.txt'):
     with open(path, 'w') as f:
         f.write("Multi-Model Comparison Report\n")
         f.write("=" * 80 + "\n\n")
-        
+
         # Overall rankings
         f.write("Overall Accuracy Rankings:\n")
         f.write("-" * 80 + "\n")
         sorted_models = sorted(results.items(), key=lambda x: x[1]['best_accuracy'], reverse=True)
         for rank, (model, data) in enumerate(sorted_models, 1):
             f.write(f"{rank}. {model:20s}: {data['best_accuracy']:.4f}\n")
-        
+
         f.write("\n" + "=" * 80 + "\n\n")
-        
+
         # Per-class analysis
         f.write("Per-Class Accuracy Analysis:\n")
         f.write("-" * 80 + "\n\n")
-        
+
         all_classes = sorted(list(sorted_models[0][1]['class_accuracies'].keys()))
-        
+
         for class_name in all_classes:
             f.write(f"\n{class_name}:\n")
-            class_results = [(m, data['class_accuracies'][class_name]) 
+            class_results = [(m, data['class_accuracies'][class_name])
                            for m, data in sorted_models]
             class_results.sort(key=lambda x: x[1], reverse=True)
-            
+
             for model, acc in class_results:
                 f.write(f"  {model:20s}: {acc:6.2f}%\n")
-        
+
         f.write("\n" + "=" * 80 + "\n")
-    
+
     print(f"📊 Comparison report saved to {path}")
 
 
@@ -599,7 +599,7 @@ if __name__ == '__main__':
     temp_dataset = TrashDataset(DATASET_ROOT_DIR)
     num_classes = temp_dataset.get_class_num()
     class_to_idx = temp_dataset.get_class_to_idx()
-    
+
     print(f"\n📊 Dataset info:")
     print(f"  Number of classes: {num_classes}")
     print(f"  Classes: {', '.join(temp_dataset.get_classes())}")
@@ -619,14 +619,14 @@ if __name__ == '__main__':
 
     # Train all models
     results = {}
-    
+
     for model_name in MODELS_TO_TRAIN:
         print("\n" + "=" * 80)
-        
+
         # Create model-specific output directory
         model_dir = os.path.join(comparison_dir, model_name)
         os.makedirs(model_dir, exist_ok=True)
-        
+
         # Train model
         model, history, best_acc, class_accs, (labels, preds) = fine_tune_model(
             model_name=model_name,
@@ -639,7 +639,7 @@ if __name__ == '__main__':
             early_stopping_patience=EARLY_STOPPING_PATIENCE,
             output_dir=model_dir
         )
-        
+
         # Save model outputs
         save_model(model, path=os.path.join(model_dir, 'final_model.pth'))
         save_class_mapping(class_to_idx, path=os.path.join(model_dir, 'class_mapping.txt'))
@@ -649,24 +649,24 @@ if __name__ == '__main__':
                                  path=os.path.join(model_dir, 'confusion_matrix.png'))
         save_classification_report(labels, preds, class_names,
                                   path=os.path.join(model_dir, 'classification_report.txt'))
-        
+
         # Store results
         results[model_name] = {
             'best_accuracy': best_acc,
             'class_accuracies': class_accs,
             'history': history
         }
-        
+
         print(f"\n✅ {model_name} completed and saved to {model_dir}")
 
     # Generate comparison visualizations
     print("\n" + "=" * 80)
     print("Generating comparison reports...")
     print("=" * 80 + "\n")
-    
+
     plot_model_comparison(results, path=os.path.join(comparison_dir, 'model_comparison.png'))
     save_comparison_report(results, path=os.path.join(comparison_dir, 'comparison_report.txt'))
-    
+
     # Save results as JSON
     results_json = {}
     for model, data in results.items():
@@ -674,10 +674,10 @@ if __name__ == '__main__':
             'best_accuracy': float(data['best_accuracy']),
             'class_accuracies': {k: float(v) for k, v in data['class_accuracies'].items()}
         }
-    
+
     with open(os.path.join(comparison_dir, 'results.json'), 'w') as f:
         json.dump(results_json, f, indent=2)
-    
+
     print("\n" + "=" * 80)
     print("🎉 All models trained successfully!")
     print("=" * 80)

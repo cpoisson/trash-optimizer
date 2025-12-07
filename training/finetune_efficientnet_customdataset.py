@@ -23,7 +23,6 @@ DATASET_ROOT_DIR = os.getenv('DATASET_ROOT_DIR')
 RESULTS_ROOT_DIR = os.getenv('RESULTS_ROOT_DIR')
 
 
-
 def get_device():
     '''Get the available device (CUDA, MPS, or CPU) for PyTorch operations'''
     return torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
