@@ -41,6 +41,18 @@ train-efficientnets: train-efficientnet-b0 train-efficientnet-b2 train-efficient
 
 train-all: train-efficientnet-b0 train-efficientnet-b2 train-efficientnet-v2-s train-convnext ## Train all models sequentially
 
+# Model comparison
+compare-all: train-all ## Train all models and generate comparison report
+	@echo ""
+	@echo "🔬 Generating model comparison report..."
+	$(PYTHON) compare_models.py
+	@echo ""
+	@echo "✓ Comparison complete! Check model_comparison.json and the report above."
+
+compare-models: ## Generate comparison report from existing results (no training)
+	@echo "🔬 Generating model comparison report from existing results..."
+	$(PYTHON) compare_models.py
+
 # Quick experiments with reduced epochs
 quick-test: ## Quick test run with 5 epochs
 	$(PYTHON) $(TRAIN_SCRIPT) --model efficientnet_b0 --epochs 5
@@ -84,4 +96,4 @@ clean: ## Remove Python cache files
 
 .PHONY: train-efficientnet-b0 train-efficientnet-b2 train-efficientnet-v2-s train-efficientnet-v2-m
 .PHONY: train-convnext train-resnet50 train-efficientnets train-custom
-.PHONY: quick-test list-models check-env
+.PHONY: quick-test list-models check-env compare-all compare-models
