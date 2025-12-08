@@ -1,0 +1,9 @@
+# Never commit secrets or credentials
+.env
+secrets/
+*.json
+*.key
+*.pem
+
+# Allow template files
+!.env.template
