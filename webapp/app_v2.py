@@ -25,12 +25,8 @@ if not INFERENCE_SERVICE_URL:
     raise ValueError("INFERENCE_SERVICE_URL is not set in environment variables.")
 
 # Session state init
-if "images" not in st.session_state:
-    st.session_state.images: List[Dict] = []
-if "image_hashes" not in st.session_state:
-    st.session_state.image_hashes = set()
-if "skip_add_once" not in st.session_state:
-    st.session_state.skip_add_once = False
+st.session_state.setdefault("images", [])
+st.session_state.setdefault("image_hashes", set())
 
 
 def _hash_bytes(data: bytes) -> str:
@@ -46,22 +42,18 @@ def trigger_rerun():
 
 
 def add_images(new_files: List[bytes], names: List[str]):
-    """Store uploaded/captured images in session, skipping duplicates."""
-    added = 0
+    """Store uploaded/captured images, skipping duplicates by hash."""
     for content, name in zip(new_files, names):
         h = _hash_bytes(content)
         if h in st.session_state.image_hashes:
             continue
         st.session_state.images.append({"name": name, "content": content, "hash": h})
         st.session_state.image_hashes.add(h)
-        added += 1
-    if added == 0 and new_files:
-        st.info("These images were already in the queue.")
 
 
 def remove_image(index: int):
-    img = st.session_state.images.pop(index)
-    # Keep hash in set to avoid re-adding the same file on rerun
+    """Remove image at index."""
+    st.session_state.images.pop(index)
 
 
 def fetch_predictions(img_bytes: bytes) -> Optional[List[Dict]]:
@@ -107,11 +99,10 @@ def display_predictions_ui(per_image_preds: List[Dict]):
             top1_conf = item["top1"]["confidence"]
             display_list = item["top3"] if top1_conf < 0.7 else [item["top1"]]
             with cols[1]:
-                st.markdown(f"**Prediction:** {display_list[0]['class']}  ({display_list[0]['confidence']:.2f})")
-                st.caption("Where should I throw this? Follow the route steps below.")
+                st.markdown(f"**{display_list[0]['confidence']*100:.0f}%** {humanize_label(display_list[0]['class'])}")
                 if top1_conf < 0.7 and len(display_list) > 1:
                     st.caption("Low confidence — other possibilities:")
-                    st.write("\n".join([f"- {p['class']} ({p['confidence']:.2f})" for p in display_list[1:]]))
+                    st.write("\n".join([f"- {humanize_label(p['class'])} ({p['confidence']*100:.0f}%)" for p in display_list[1:]]))
 
 
 def get_category_color(category: str) -> List[int]:
@@ -129,6 +120,11 @@ def get_category_color(category: str) -> List[int]:
     return palette.get(category, [0, 100, 200])
 
 
+def humanize_label(label: str) -> str:
+    """Make class names user-friendly for display."""
+    return label.replace("_", " ").title()
+
+
 def render_step_cards(df_points: pd.DataFrame):
     """Render route steps as small cards."""
     for step_index, (_, row) in enumerate(df_points.iloc[1:].iterrows(), start=1):
@@ -136,13 +132,31 @@ def render_step_cards(df_points: pd.DataFrame):
         with card:
             cols = st.columns([2, 1])
             with cols[0]:
-                st.markdown(f"**Step {step_index}: Drop off {row['trash_type']}**")
+                st.markdown(f"**Step {step_index}: Drop off {humanize_label(row['trash_type'])}**")
                 st.caption("Follow the map to reach this stop.")
             with cols[1]:
                 st.markdown(f"Distance: **{row['distance_m'] / 1000:.2f} km**")
                 st.markdown(f"Duration: **{row['duration_s'] / 60:.1f} min**")
 
 
+def compute_view_state(df_points: pd.DataFrame):
+    """Compute a view state that keeps all points visible without over-zooming."""
+    if df_points.empty:
+        return pdk.ViewState(latitude=0, longitude=0, zoom=12)
+    min_lat, max_lat = df_points["lat"].min(), df_points["lat"].max()
+    min_lon, max_lon = df_points["lon"].min(), df_points["lon"].max()
+    center_lat = (min_lat + max_lat) / 2
+    center_lon = (min_lon + max_lon) / 2
+    lat_span = max(max_lat - min_lat, 1e-4) * 1.3
+    lon_span = max(max_lon - min_lon, 1e-4) * 1.3
+    span = max(lat_span, lon_span)
+    zoom = max(8, min(15, 12 - span * 60))
+    return pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=zoom)
+
+
+# --------------------------------------
+# Layout and user flow
+# --------------------------------------
 st.set_page_config(page_title="Trash Optimizer", layout="wide", page_icon="🗑️")
 st.title("Trash Optimizer")
 st.caption("Simple route planning based on your photos. Steps: Address → Images → Route.")
@@ -168,8 +182,6 @@ col1, col2, col3 = st.columns(3)
 with col1:
     minimizer = st.radio("Optimize for", ("duration", "distance"), horizontal=True)
 with col2:
-    choice = st.radio("Provide images", ("Upload files", "Take a picture"), horizontal=True)
-with col3:
     road_mode = st.radio("Travel mode", ("Car 🚗", "Bike 🚴", "Foot 👟"), horizontal=True)
 if road_mode == "Car 🚗":
     final_road_mode = "driving-car"
@@ -185,57 +197,33 @@ with col5:
     recycling = st.checkbox("Recycling trash ♻️ on the road", value=True)
 with col6:
     ress = st.checkbox("Add good-looking items to a ressourcerie")
-st.caption(f"Misc: {'on the road' if misc else 'at home'} | Recycling: {'on the road' if recycling else 'at home'} | Ressourcerie: {'added' if ress else 'not added'}")
 
 # Image inputs
 st.markdown("### 3) Images to analyze")
 col_upload, col_camera = st.columns([2, 1])
-if choice == "Upload files":
-    with col_upload:
-        uploaded_files = st.file_uploader(
-            "Upload images",
-            type=["jpg", "png", "jpeg"],
-            accept_multiple_files=True,
-            key=UPLOAD_KEY,
-        )
-        if uploaded_files and not st.session_state.get("skip_add_once", False):
-            add_images([f.read() for f in uploaded_files], [f.name for f in uploaded_files])
-        st.session_state.skip_add_once = False
-    with col_camera:
-        st.caption("Or take a picture")
-        camera_image = st.camera_input("Camera shot")
-        if camera_image:
-            add_images([camera_image.getvalue()], ["camera_capture"])
-else:
-    with col_camera:
-        camera_image = st.camera_input("Camera shot")
-        if camera_image:
-            add_images([camera_image.getvalue()], ["camera_capture"])
-    with col_upload:
-        uploaded_files = st.file_uploader(
-            "Upload images",
-            type=["jpg", "png", "jpeg"],
-            accept_multiple_files=True,
-            key=UPLOAD_KEY,
-        )
-        if uploaded_files and not st.session_state.get("skip_add_once", False):
-            add_images([f.read() for f in uploaded_files], [f.name for f in uploaded_files])
-        st.session_state.skip_add_once = False
+with col_upload:
+    uploaded_files = st.file_uploader(
+        "Upload images",
+        type=["jpg", "png", "jpeg"],
+        accept_multiple_files=True,
+        key=UPLOAD_KEY,
+    )
+    if uploaded_files:
+        add_images([f.read() for f in uploaded_files], [f.name for f in uploaded_files])
+with col_camera:
+    st.caption("Or take a picture")
+    camera_image = st.camera_input("Camera shot")
+    if camera_image:
+        add_images([camera_image.getvalue()], ["camera_capture"])
 
 # Show current queue
 if st.session_state.images:
     st.write("### Selected images")
-    st.caption(f"{len(st.session_state.images)} image(s) queued")
-    if st.button("Clear all"):
-        st.session_state.images = []
-        st.session_state.image_hashes = set()
-        st.session_state.skip_add_once = True
-        trigger_rerun()
     grid_cols = st.columns(3)
     for idx, item in enumerate(st.session_state.images):
         col = grid_cols[idx % 3]
         with col:
-            st.write(item["name"])
+            st.markdown(f"**{item['name']}**")
             st.image(item["content"], width=180)
             if st.button("Remove", key=f"remove_{idx}"):
                 remove_image(idx)
@@ -255,15 +243,12 @@ if run_pred:
     consolidated_inputs = []
     failed_images = []
 
-    progress_bar = st.progress(0)
-    for idx, img in enumerate(st.session_state.images):
-        progress_bar.progress((idx) / len(st.session_state.images))
+    for img in st.session_state.images:
         preds = fetch_predictions(img["content"])
         if preds is None:
             failed_images.append(img["name"])
             continue
 
-        # Sort predictions by confidence desc
         sorted_preds = sorted(preds, key=lambda x: x.get("confidence", 0), reverse=True)
         top1 = sorted_preds[0] if sorted_preds else {"class": "unknown", "confidence": 0.0}
         top3 = sorted_preds[:3]
@@ -274,8 +259,6 @@ if run_pred:
             "content": img["content"],
         })
         consolidated_inputs.append(top1)
-
-    progress_bar.progress(1.0)
 
     if failed_images:
         st.warning(f"Predictions failed for: {', '.join(failed_images)}")
@@ -293,21 +276,13 @@ if run_pred:
         else:
             st.success(f"Classes sent to routing: {[c['class'] for c in consolidated]}")
 
-            # Route computation
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            def update_progress(fraction):
-                progress_bar.progress(min(fraction, 1.0))
-                status_text.write(f"Processing… {int(fraction*100)}%")
-
             road_client = None
             import openrouteservice
             road_client = openrouteservice.Client(key=GEO_SERVICE_API_KEY)
             pick_up = {
                 "lat": user_input[0],
                 "lon": user_input[1],
-                "trash_type": "User Start Point",
+                "trash_type": "Start",
                 "distance": 0,
             }
 
@@ -319,11 +294,8 @@ if run_pred:
                 profile=final_road_mode,
                 minimizer=minimizer,
                 keep_top_k=keep_top_k,
-                progress_callback=update_progress,
+                progress_callback=None,
             )
-
-            progress_bar.progress(1.0)
-            status_text.write("Routing complete.")
 
             if not drop_off_list:
                 st.error("No drop-off points found for the selected classes.")
@@ -334,20 +306,25 @@ if run_pred:
                 all_points.append({
                     "lon": pick_up["lon"],
                     "lat": pick_up["lat"],
-                    "name": "Start",
                     "trash_type": "Start",
+                    "label": "Start",
+                    "color": [255, 0, 0],   # start in red
                     "distance": 0,
                     "unit": " ",
                 })
 
-                for drop_off in drop_off_list:
+                for idx_step, drop_off in enumerate(drop_off_list, start=1):
                     route = get_route(all_points[-1], drop_off, road_client, profile=final_road_mode)
                     coords = route["features"][0]["geometry"]["coordinates"]
-                    all_paths.append({"trash_type": drop_off["trash_type"], "path": coords})
+                    # Single color for all segments
+                    path_color = [0, 100, 200]
+                    all_paths.append({"trash_type": drop_off["trash_type"], "path": coords, "color": path_color})
                     all_points.append({
                         "lon": drop_off["lon"],
                         "lat": drop_off["lat"],
                         "trash_type": drop_off["trash_type"],
+                        "label": f"{idx_step}",
+                        "color": [255, 215, 0],  # yellow for stops
                         "distance_m": drop_off["distance_m"],
                         "duration_s": drop_off["duration_s"],
                     })
@@ -359,33 +336,30 @@ if run_pred:
                     "ScatterplotLayer",
                     df_points,
                     get_position="[lon, lat]",
-                    get_color="[200, 30, 0]",
-                    get_radius=20,
+                    get_color="color",
+                    get_radius=40,
                 )
                 text_layer = pdk.Layer(
                     "TextLayer",
                     df_points,
                     pickable=True,
                     get_position="[lon, lat]",
-                    get_text="trash_type",
-                    get_color=[255, 255, 0],
-                    get_size=20,
-                    get_alignment_baseline="'bottom'",
+                    get_text="label",
+                    get_color=[0, 0, 0],
+                    get_size=16,
+                    get_alignment_baseline="'middle'",
+                    get_pixel_offset=[0, -10],
                 )
                 route_layer = pdk.Layer(
                     "PathLayer",
                     df_path,
                     get_path="path",
-                    get_color=[0, 100, 200],
+                    get_color="color",
                     width_scale=10,
                     width_min_pixels=3,
                 )
 
-                view_state = pdk.ViewState(
-                    latitude=df_points["lat"].mean(),
-                    longitude=df_points["lon"].mean(),
-                    zoom=14,
-                )
+                view_state = compute_view_state(df_points)
 
                 route_map = pdk.Deck(
                     layers=[point_layer, route_layer, text_layer],
@@ -396,13 +370,4 @@ if run_pred:
 
                 st.subheader("Steps")
                 if len(df_points) > 1:
-                    steps_rows = []
-                    for step_index, (_, row) in enumerate(df_points.iloc[1:].iterrows(), start=1):
-                        steps_rows.append({
-                            "Step": step_index,
-                            "Type": row["trash_type"],
-                            "Distance (km)": round(row["distance_m"] / 1000, 2),
-                            "Duration (min)": round(row["duration_s"] / 60, 1),
-                        })
-                    steps_df = pd.DataFrame(steps_rows)
-                    st.table(steps_df)
+                    render_step_cards(df_points)
