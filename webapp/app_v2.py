@@ -16,6 +16,7 @@ from route_functions import get_dropoff, get_route
 load_dotenv()
 GEO_SERVICE_API_KEY = os.getenv("GEO_SERVICE_API_KEY")
 INFERENCE_SERVICE_URL = os.getenv("INFERENCE_SERVICE_URL")
+UPLOAD_KEY = "upload_images"
 
 # Validate environment variables early
 if not GEO_SERVICE_API_KEY:
@@ -23,11 +24,13 @@ if not GEO_SERVICE_API_KEY:
 if not INFERENCE_SERVICE_URL:
     raise ValueError("INFERENCE_SERVICE_URL is not set in environment variables.")
 
-# Session state init (liste des images ajoutés)
+# Session state init
 if "images" not in st.session_state:
     st.session_state.images: List[Dict] = []
 if "image_hashes" not in st.session_state:
     st.session_state.image_hashes = set()
+if "skip_add_once" not in st.session_state:
+    st.session_state.skip_add_once = False
 
 
 def _hash_bytes(data: bytes) -> str:
@@ -58,7 +61,7 @@ def add_images(new_files: List[bytes], names: List[str]):
 
 def remove_image(index: int):
     img = st.session_state.images.pop(index)
-    st.session_state.image_hashes.discard(img.get("hash"))
+    # Keep hash in set to avoid re-adding the same file on rerun
 
 
 def fetch_predictions(img_bytes: bytes) -> Optional[List[Dict]]:
@@ -95,37 +98,70 @@ def consolidate_classes(predictions: List[Dict], misc: bool, recycling: bool, re
 def display_predictions_ui(per_image_preds: List[Dict]):
     """Show per-image predictions as compact cards."""
     for item in per_image_preds:
-        st.markdown(f"**{item['name']}**")
-        cols = st.columns([1, 3])
-        if thumb := item.get("content"):
+        card = st.container(border=True)
+        with card:
+            cols = st.columns([1, 2])
+            if thumb := item.get("content"):
+                with cols[0]:
+                    st.image(thumb, width=130)
+            top1_conf = item["top1"]["confidence"]
+            display_list = item["top3"] if top1_conf < 0.7 else [item["top1"]]
+            with cols[1]:
+                st.markdown(f"**Prediction:** {display_list[0]['class']}  ({display_list[0]['confidence']:.2f})")
+                st.caption("Where should I throw this? Follow the route steps below.")
+                if top1_conf < 0.7 and len(display_list) > 1:
+                    st.caption("Low confidence — other possibilities:")
+                    st.write("\n".join([f"- {p['class']} ({p['confidence']:.2f})" for p in display_list[1:]]))
+
+
+def get_category_color(category: str) -> List[int]:
+    palette = {
+        "miscellaneous_trash": [200, 80, 60],
+        "metal": [80, 120, 200],
+        "paper": [120, 200, 240],
+        "cardboard": [180, 140, 80],
+        "plastic": [240, 180, 80],
+        "glass": [100, 200, 180],
+        "textile_trash": [200, 120, 200],
+        "vegetation": [120, 200, 120],
+        "ressourcerie": [160, 120, 240],
+    }
+    return palette.get(category, [0, 100, 200])
+
+
+def render_step_cards(df_points: pd.DataFrame):
+    """Render route steps as small cards."""
+    for step_index, (_, row) in enumerate(df_points.iloc[1:].iterrows(), start=1):
+        card = st.container(border=True)
+        with card:
+            cols = st.columns([2, 1])
             with cols[0]:
-                st.image(thumb, width=120)
-        top1_conf = item["top1"]["confidence"]
-        display_list = item["top3"] if top1_conf < 0.7 else [item["top1"]]
-        with cols[1]:
-            st.write(f"Top-1: **{display_list[0]['class']}** ({display_list[0]['confidence']:.2f})")
-            if top1_conf < 0.7 and len(display_list) > 1:
-                st.caption("Alternatives (low confidence):")
-                st.write("\n".join([f"- {p['class']} ({p['confidence']:.2f})" for p in display_list[1:]]))
+                st.markdown(f"**Step {step_index}: Drop off {row['trash_type']}**")
+                st.caption("Follow the map to reach this stop.")
+            with cols[1]:
+                st.markdown(f"Distance: **{row['distance_m'] / 1000:.2f} km**")
+                st.markdown(f"Duration: **{row['duration_s'] / 60:.1f} min**")
 
 
-st.title("Trash-optimizer Front - v2")
-st.caption("Steps: 1) Address 2) Images 3) Route")
+st.set_page_config(page_title="Trash Optimizer", layout="wide", page_icon="🗑️")
+st.title("Trash Optimizer")
+st.caption("Simple route planning based on your photos. Steps: Address → Images → Route.")
 
 st.markdown("### 1) Start address")
-address = st.text_input("Enter your address", value="Nantes")
+st.markdown("Enter where your route should start. We'll locate it for you.")
+address = st.text_input("Your address", value="Nantes", placeholder="e.g., 123 Main St, City")
 user_input = None
 if address:
     geolocator = Nominatim(user_agent="streamlit_app_v2")
     try:
         location = geolocator.geocode(address)
         if location:
-            st.success(f"Address located: lat {location.latitude}, lon {location.longitude}")
+            st.success("Great, we found your starting point.")
             user_input = (location.latitude, location.longitude)
         else:
-            st.error("Address not found. Check spelling.")
+            st.error("We couldn't find that address. Try a nearby landmark.")
     except Exception as exc:
-        st.error(f"Geocoding error: {exc}")
+        st.error("Geocoding failed. Please try again in a moment.")
 
 st.markdown("### 2) Options")
 col1, col2, col3 = st.columns(3)
@@ -160,9 +196,11 @@ if choice == "Upload files":
             "Upload images",
             type=["jpg", "png", "jpeg"],
             accept_multiple_files=True,
+            key=UPLOAD_KEY,
         )
-        if uploaded_files:
+        if uploaded_files and not st.session_state.get("skip_add_once", False):
             add_images([f.read() for f in uploaded_files], [f.name for f in uploaded_files])
+        st.session_state.skip_add_once = False
     with col_camera:
         st.caption("Or take a picture")
         camera_image = st.camera_input("Camera shot")
@@ -178,9 +216,11 @@ else:
             "Upload images",
             type=["jpg", "png", "jpeg"],
             accept_multiple_files=True,
+            key=UPLOAD_KEY,
         )
-        if uploaded_files:
+        if uploaded_files and not st.session_state.get("skip_add_once", False):
             add_images([f.read() for f in uploaded_files], [f.name for f in uploaded_files])
+        st.session_state.skip_add_once = False
 
 # Show current queue
 if st.session_state.images:
@@ -189,6 +229,7 @@ if st.session_state.images:
     if st.button("Clear all"):
         st.session_state.images = []
         st.session_state.image_hashes = set()
+        st.session_state.skip_add_once = True
         trigger_rerun()
     grid_cols = st.columns(3)
     for idx, item in enumerate(st.session_state.images):
