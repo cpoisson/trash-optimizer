@@ -21,6 +21,13 @@ ENV/
 .python-version
 .env
 
+# Deployment secrets (Docker)
+deployment/.env
+deployment/secrets/
+*.json
+*.key
+*.pem
+
 # IDE
 .vscode/
 .idea/

@@ -34,3 +34,15 @@ To automatically activate the environment when entering this directory:
 ```bash
 echo "trash-optimizer" > .python-version
 ```
+
+## Docker Deployment
+
+For production deployment, use Docker to run both the inference backend and webapp in a single container:
+
+```bash
+cd deployment
+./setup.sh              # Initial setup
+docker-compose up --build  # Build and run
+```
+
+See [`deployment/README.md`](deployment/README.md) for complete deployment documentation.
