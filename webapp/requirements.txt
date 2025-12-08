@@ -1,5 +1,6 @@
+db-dtypes
 openrouteservice
-pandas
+ipandas
 streamlit
 Pillow
 pydeck
