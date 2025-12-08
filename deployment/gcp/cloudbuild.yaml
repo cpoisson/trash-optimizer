@@ -1,0 +1,14 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_IMAGE_URL}'
+      - '-f'
+      - 'deployment/Dockerfile'
+      - '.'
+images:
+  - '${_IMAGE_URL}'
+timeout: 1200s
+options:
+  machineType: 'E2_HIGHCPU_8'

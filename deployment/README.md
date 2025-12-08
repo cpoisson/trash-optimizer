@@ -34,7 +34,23 @@ cp /path/to/your/gcp-service-account.json deployment/secrets/gcp-credentials.jso
 
 **IMPORTANT**: Never commit `deployment/secrets/` or `deployment/.env` to git!
 
-### 2. Configure Environment Variables
+### 2. Configure GCP Deployment (for Cloud Run deployment)
+
+If deploying to Google Cloud Platform, configure your GCP settings:
+```bash
+cp deployment/gcp/config.sh.template deployment/gcp/config.sh
+```
+
+Edit `deployment/gcp/config.sh` with your values:
+```bash
+PROJECT_ID="your-gcp-project-id"
+REGION="europe-west9"  # or your preferred region
+DATASET_ID="your-bigquery-dataset-name"
+```
+
+**IMPORTANT**: `deployment/gcp/config.sh` is gitignored and will not be committed.
+
+### 3. Configure Environment Variables
 
 Copy the template and fill in your secrets:
 ```bash
@@ -52,7 +68,7 @@ GCP_DATASET=your-dataset-name
 GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-credentials.json
 ```
 
-### 3. Build and Run
+### 4. Build and Run
 
 Using Docker Compose (recommended):
 ```bash
@@ -76,7 +92,7 @@ docker run -d \
   trash-optimizer:latest
 ```
 
-### 4. Access the Application
+### 5. Access the Application
 
 Open your browser and navigate to:
 ```

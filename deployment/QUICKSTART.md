@@ -14,6 +14,10 @@ cp ~/path/to/your-service-account-key.json secrets/gcp-credentials.json
 
 # Edit .env with your actual API keys
 nano .env  # or vim, code, etc.
+
+# For GCP Cloud Run deployment, configure GCP settings
+cp gcp/config.sh.template gcp/config.sh
+nano gcp/config.sh  # Update PROJECT_ID, REGION, DATASET_ID
 ```
 
 ## Build and Run
@@ -68,6 +72,10 @@ deployment/
 ├── .env                   # Your secrets (gitignored)
 ├── secrets/               # Directory for credential files (gitignored)
 │   └── gcp-credentials.json
+├── gcp/                   # GCP Cloud Run deployment scripts
+│   ├── config.sh.template # GCP configuration template
+│   ├── config.sh          # Your GCP config (gitignored)
+│   └── *.sh               # Deployment scripts
 ├── setup.sh               # Automated setup script
 ├── Makefile               # Command shortcuts
 └── README.md              # Full documentation
@@ -75,10 +83,11 @@ deployment/
 
 ## Secrets Management
 
-- **Never commit** `.env` or `secrets/` to git (already in .gitignore)
+- **Never commit** `.env`, `secrets/`, or `gcp/config.sh` to git (already in .gitignore)
 - API keys go in `.env`
 - GCP JSON credential file goes in `secrets/gcp-credentials.json`
-- Both are mounted into the container at runtime
+- GCP project settings go in `gcp/config.sh`
+- All are mounted/sourced at runtime
 
 ## Troubleshooting
 
