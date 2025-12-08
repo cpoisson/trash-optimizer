@@ -25,19 +25,51 @@ def load_benchmark_results(results_dir: Path) -> Dict[str, Any]:
     with open(benchmark_path, 'r') as f:
         benchmark = json.load(f)
 
-    # Extract best validation accuracy from training history
+    # Extract accuracy from classification_report.txt
+    classification_report_path = results_dir / "classification_report.txt"
     best_val_acc = 0.0
-    if history_path.exists():
+
+    if classification_report_path.exists():
+        with open(classification_report_path, 'r') as f:
+            for line in f:
+                # Look for the accuracy line: "           accuracy                         0.9185      1681"
+                if 'accuracy' in line and not 'Train Accuracy' in line:
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[0] == 'accuracy':
+                        try:
+                            best_val_acc = float(parts[1]) * 100  # Convert to percentage
+                        except (ValueError, IndexError):
+                            pass
+                        break
+
+    # Fallback: try training_history.txt for best val accuracy
+    if best_val_acc == 0.0 and history_path.exists():
+        max_val_acc = 0.0
         with open(history_path, 'r') as f:
             for line in f:
-                if "Best validation accuracy:" in line:
-                    best_val_acc = float(line.split(":")[-1].strip().rstrip('%'))
-                    break
+                if "Val Accuracy:" in line:
+                    try:
+                        val_acc = float(line.split(":")[-1].strip())
+                        max_val_acc = max(max_val_acc, val_acc)
+                    except ValueError:
+                        pass
+        best_val_acc = max_val_acc * 100  # Convert to percentage
+
+    # Parse directory name: YYYYMMDD_HHMMSS_modelname
+    dir_parts = results_dir.name.split('_')
+    # First part is date, second is time, rest is model name
+    if len(dir_parts) >= 3:
+        timestamp = f"{dir_parts[0]}_{dir_parts[1]}"
+        model_name = '_'.join(dir_parts[2:])
+    else:
+        # Fallback
+        timestamp = dir_parts[0]
+        model_name = '_'.join(dir_parts[1:]) if len(dir_parts) > 1 else results_dir.name
 
     return {
         'directory': results_dir.name,
-        'timestamp': results_dir.name.split('_')[0],
-        'model_name': '_'.join(results_dir.name.split('_')[1:]),
+        'timestamp': timestamp,
+        'model_name': model_name,
         'best_val_accuracy': best_val_acc,
         'benchmark': benchmark
     }
@@ -64,12 +96,13 @@ def find_latest_results(results_root: Path, model_names: List[str] = None) -> Di
         if not result_dir.is_dir():
             continue
 
-        # Parse directory name: YYYYMMDDHHMMSS_modelname
-        parts = result_dir.name.split('_', 1)
-        if len(parts) != 2:
+        # Parse directory name: YYYYMMDD_HHMMSS_modelname
+        dir_parts = result_dir.name.split('_')
+        if len(dir_parts) < 3:
             continue
 
-        timestamp, model_name = parts
+        # First part is date, second is time, rest is model name
+        model_name = '_'.join(dir_parts[2:])
 
         # Skip if filtering by model names
         if model_names and model_name not in model_names:
@@ -237,6 +270,30 @@ def save_comparison_json(results: Dict[str, Dict], output_path: Path):
     print(f"💾 Comparison results saved to {output_path}")
 
 
+def save_comparison_report(results: Dict[str, Dict], output_path: Path):
+    """Save comparison report as text file.
+
+    Args:
+        results: Dictionary of model results.
+        output_path: Path to save text report.
+    """
+    import io
+    import sys
+
+    # Capture the print output
+    old_stdout = sys.stdout
+    sys.stdout = buffer = io.StringIO()
+
+    try:
+        print_comparison_table(results)
+        report_text = buffer.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    output_path.write_text(report_text)
+    print(f"📄 Comparison report saved to {output_path}")
+
+
 def main():
     """Main comparison function."""
     parser = argparse.ArgumentParser(description="Compare trained model results")
@@ -276,9 +333,19 @@ def main():
     # Print comparison table
     print_comparison_table(results)
 
-    # Save JSON
+    # Save JSON to current directory
     output_path = Path(args.output)
     save_comparison_json(results, output_path)
+
+    # Also save both JSON and text report to results directory
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    comparison_dir = results_root / f"comparison_{timestamp}"
+    comparison_dir.mkdir(exist_ok=True)
+
+    save_comparison_json(results, comparison_dir / "comparison_results.json")
+    save_comparison_report(results, comparison_dir / "comparison_report.txt")
+
+    print(f"\n📁 Full comparison saved to: {comparison_dir}")
 
 
 if __name__ == '__main__':
