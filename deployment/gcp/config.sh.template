@@ -1,0 +1,19 @@
+# GCP Deployment Configuration
+# Copy this file to config.sh and update with your values
+# config.sh is gitignored and will not be committed
+
+# GCP Project Configuration
+PROJECT_ID="your-gcp-project-id"
+REGION="europe-west9"  # Paris region
+
+# BigQuery Configuration
+DATASET_ID="your-dataset-name"
+
+# Docker/Artifact Registry Configuration
+# REPO_NAME: Artifact Registry repository where Docker images are stored
+# IMAGE_NAME: Name of your Docker image (the containerized application)
+# SERVICE_NAME: Name of your Cloud Run service (the deployed application)
+# Usually no need to change these unless you want multiple environments (dev/prod)
+REPO_NAME="trash-optimizer-repo"
+IMAGE_NAME="trash-optimizer"
+SERVICE_NAME="trash-optimizer"

@@ -1,0 +1,13 @@
+# Never commit secrets or credentials
+.env
+secrets/
+*.json
+*.key
+*.pem
+
+# GCP configuration (use config.sh.template)
+gcp/config.sh
+
+# Allow template files
+!.env.template
+!gcp/config.sh.template
