@@ -31,7 +31,7 @@ if HF_TOKEN and HF_MODEL_REPO_ID:
 
     # Construct remote filenames (these are paths within the repo, not local paths)
     hf_model_filename = f"{latest_model_folder}/model.pth"
-    hf_model_categories_filename = f"{latest_model_folder}/categories.txt"
+    hf_model_categories_filename = f"{latest_model_folder}/class_mapping.txt"
 
     # Download model file
     model_path = hf.hf_hub_download(repo_id=HF_MODEL_REPO_ID, filename=hf_model_filename)
