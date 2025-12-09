@@ -527,7 +527,6 @@ def screen_trash_items():
         st.info("✅ Maximum items (4) reached. Remove an item to add more.")
 
     # Items list - main focus of the screen (compact design with thumbnails)
-    st.markdown("---")
 
     if st.session_state.trash_items:
         st.subheader(f"Items to Drop Off ({len(st.session_state.trash_items)}/4)")
