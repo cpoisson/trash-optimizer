@@ -355,27 +355,7 @@ def screen_location():
         placeholder="City, Country or Full Address"
     )
 
-    # Geocode and show location on map
-    if address:
-        location = geocode_address(address)
-        if location:
-            st.session_state.user_location = location
-            logger.info(f"Location saved to session: {location}")
-            st.success(f"✅ Location found: {address}")
-        else:
-            logger.warning(f"Failed to geocode address: {address}")
-
-    # Always show a map (fallback to Nantes if nothing yet) - smaller size for mobile responsiveness
-    map_location = st.session_state.user_location or DEFAULT_LOCATION
-    map_data = pd.DataFrame([{"lat": map_location["lat"], "lon": map_location["lon"]}])
-
-    # Use container to control map height
-    with st.container():
-        st.map(map_data, latitude="lat", longitude="lon", zoom=12, use_container_width=True, height=300)
-
-    # Transport mode selector
-    st.markdown("---")
-    st.markdown("## 🚗 How Will You Travel?")
+    # Transport Option
     transport_option = st.radio(
         "Select your transport mode:",
         ["🚗 Driving", "🚴 Cycling", "👟 Walking"],
@@ -389,6 +369,38 @@ def screen_location():
     }
     st.session_state.transport_mode = mode_map[transport_option]
     logger.info(f"Transport mode selected: {st.session_state.transport_mode}")
+
+    # Geocode and show location on map
+    if address:
+        location = geocode_address(address)
+        if location:
+            st.session_state.user_location = location
+            logger.info(f"Location saved to session: {location}")
+            st.success(f"✅ Location found: {address}")
+        else:
+            logger.warning(f"Failed to geocode address: {address}")
+
+    # Always show a map (fallback to Nantes if nothing yet) - smaller size for mobile responsiveness
+    map_location = st.session_state.user_location or DEFAULT_LOCATION
+
+    # Create Folium map for location preview
+    location_map = folium.Map(
+        location=[map_location["lat"], map_location["lon"]],
+        zoom_start=12,
+        tiles="OpenStreetMap"
+    )
+
+    # Add marker for the location
+    folium.Marker(
+        location=[map_location["lat"], map_location["lon"]],
+        popup="<b>📍 Your Location</b>",
+        tooltip="Your location",
+        icon=folium.Icon(color='blue', icon='home', prefix='fa')
+    ).add_to(location_map)
+
+    # Render map
+    st_folium(location_map, width=None, height=300, use_container_width=True, returned_objects=[])
+
 
     # Navigation
     col_back, col_next = st.columns([1, 1])
