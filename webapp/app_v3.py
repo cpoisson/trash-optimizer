@@ -837,7 +837,15 @@ def screen_map():
                 st_folium(m, width=None, height=500, use_container_width=True, returned_objects=[])
 
             with col_list:
-                st.markdown("### 📍 Drop-off Locations")
+                # Header with global Google Maps navigation
+                col_header, col_nav = st.columns([2, 1])
+                with col_header:
+                    st.markdown("### 📍 Locations")
+                with col_nav:
+                    # Build waypoints string for multi-stop Google Maps route
+                    waypoints_str = "|".join([f"{w['lat']},{w['lon']}" for w in ordered_waypoints])
+                    gmaps_full_route = f"https://www.google.com/maps/dir/?api=1&origin={st.session_state.user_location['lat']},{st.session_state.user_location['lon']}&destination={ordered_waypoints[-1]['lat']},{ordered_waypoints[-1]['lon']}&waypoints={waypoints_str}"
+                    st.markdown(f"[🗺️ Navigate]({gmaps_full_route})")
 
                 for seg_idx, segment in enumerate(route_segments, 1):
                     # Find items for this destination
@@ -848,59 +856,38 @@ def screen_map():
                             if waypoint["name"] == destination_name and waypoint.get("trash_class") == item["category"]:
                                 items_for_stop.append(item)
 
-                    # Get waypoint for address and Google Maps link
+                    # Get waypoint for address
                     waypoint = next((w for w in ordered_waypoints if w["name"] == destination_name), None)
 
-                    # Stop card
-                    with st.container():
-                        st.markdown(f"**Stop {seg_idx}**")
+                    # Distance and duration
+                    dist_km = segment["distance"] / 1000
+                    dur_min = segment["duration"] // 60
 
-                        # Items to drop
-                        if items_for_stop:
-                            items_text = ", ".join([f"{get_category_icon(item['category'])} {item['category'].replace('_', ' ').title()}" for item in items_for_stop])
-                            st.markdown(f"🗑️ {items_text}")
+                    # Build compact summary for expander header
+                    if items_for_stop:
+                        items_text = ", ".join([f"{get_category_icon(item['category'])} {item['category'].replace('_', ' ').title()}" for item in items_for_stop])
+                        summary = f"**{seg_idx}.** {items_text} • {dist_km:.1f}km • {dur_min}min"
+                    else:
+                        summary = f"**{seg_idx}.** {dist_km:.1f}km • {dur_min}min"
+
+                    # Collapsible expander for details
+                    with st.expander(summary, expanded=False):
+                        # Location name
+                        if waypoint and waypoint.get("location_name"):
+                            st.markdown(f"📍 **{waypoint.get('location_name')}**")
 
                         # Address
-                        if waypoint:
-                            address = waypoint.get("address", "")
-                            location_name = waypoint.get("location_name", "")
-                            if location_name:
-                                st.markdown(f"📍 {location_name}")
-                            if address:
-                                st.markdown(f"📮 {address}")
-
-                        # Distance and duration
-                        dist_km = segment["distance"] / 1000
-                        dur_min = segment["duration"] // 60
-                        st.markdown(f"📏 {dist_km:.1f} km • ⏱️ {dur_min} min")
-
-                        # Google Maps link
-                        if waypoint:
-                            gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={st.session_state.user_location['lat']},{st.session_state.user_location['lon']}&destination={waypoint['lat']},{waypoint['lon']}"
-                            st.markdown(f"[🗺️ Navigate]({gmaps_url})")
-
-                        st.markdown("---")
+                        if waypoint and waypoint.get("address"):
+                            st.caption(waypoint.get('address'))
         else:
             st.warning("Could not calculate route. Please check your connection and try again.")
 
-    # Navigation
+    # Back button only
     st.markdown("---")
-    col_back, col_restart = st.columns([1, 1])
-
-    with col_back:
-        if st.button("⬅️ Edit Items", key="map_back", use_container_width=True):
-            logger.info("User clicked back from map screen to edit items")
-            st.session_state.screen = 2
-            st.rerun()
-
-    with col_restart:
-        if st.button("🔄 Start Over", key="map_restart", use_container_width=True):
-            logger.info("User clicked 'Start Over' - resetting application state")
-            st.session_state.screen = 0
-            st.session_state.user_location = None
-            st.session_state.trash_items = []
-            st.session_state.drop_off_locations = None
-            st.rerun()
+    if st.button("⬅️ Edit Items", key="map_back", use_container_width=False):
+        logger.info("User clicked back from map screen to edit items")
+        st.session_state.screen = 2
+        st.rerun()
 
 
 # ============================================================================
