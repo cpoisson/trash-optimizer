@@ -5,6 +5,10 @@ from google.cloud import bigquery
 from  .params import category_mapping
 
 def get_loc(list_trash = None):
+    """
+    Fetch drop-off locations from BigQuery for specified trash categories.
+    Optimized to use single query with OR conditions instead of multiple queries.
+    """
     if list_trash is None:
         list_trash = ["food_organics"]
     load_dotenv()
@@ -12,14 +16,18 @@ def get_loc(list_trash = None):
     GCP_PROJECT = os.getenv("GCP_PROJECT")
     GCP_DATASET = os.getenv("GCP_DATASET")
     bigquery_client = bigquery.Client(project=GCP_PROJECT)
-    dfs = []
 
-    for category in list_trash:
-        if category not in category_mapping:
-            print(f"Category '{category}' not in mapping, skipping.")
-            continue
+    # Filter out unmapped categories
+    valid_categories = [cat for cat in list_trash if cat in category_mapping]
 
-        query = f"""
+    if not valid_categories:
+        print("No valid categories found in mapping.")
+        return pd.DataFrame(columns=["Name", "Address", "Longitude", "Latitude", "Trash_class"])
+
+    # Build single query with UNION ALL for better performance
+    subqueries = []
+    for category in valid_categories:
+        subquery = f"""
         SELECT
             Name,
             Address,
@@ -31,13 +39,14 @@ def get_loc(list_trash = None):
         AND Longitude IS NOT NULL
         AND Latitude IS NOT NULL
         """
+        subqueries.append(subquery)
 
+    # Combine all subqueries with UNION ALL
+    query = " UNION ALL ".join(subqueries)
+
+    try:
         df = bigquery_client.query(query).to_dataframe()
-        dfs.append(df)
-
-    if dfs:
-        # Concatène tous les DataFrames et supprime les doublons
-        result_df = pd.concat(dfs, ignore_index=True).drop_duplicates()
-        return result_df
-    else:
+        return df.drop_duplicates()
+    except Exception as e:
+        print(f"BigQuery error: {e}")
         return pd.DataFrame(columns=["Name", "Address", "Longitude", "Latitude", "Trash_class"])
