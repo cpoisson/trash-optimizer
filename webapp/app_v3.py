@@ -904,6 +904,24 @@ def screen_map():
                     # Address
                     if waypoint and waypoint.get("address"):
                         st.caption(waypoint.get('address'))
+
+                    # Show thumbnails of items to drop at this location
+                    if items_for_stop:
+                        st.markdown("---")
+                        for item in items_for_stop:
+                            col_thumb, col_info = st.columns([1, 3])
+                            with col_thumb:
+                                st.image(item["image"], width=100)
+                            with col_info:
+                                icon = get_category_icon(item['category'])
+                                st.caption(f"{icon} {item['category'].replace('_', ' ').title()}")
+                                conf_pct = item['confidence'] * 100
+                                if conf_pct >= 70:
+                                    st.caption(f"✅ {conf_pct:.0f}%")
+                                elif conf_pct >= 50:
+                                    st.caption(f"⚠️ {conf_pct:.0f}%")
+                                else:
+                                    st.caption(f"❓ {conf_pct:.0f}%")
     else:
         st.warning("Could not calculate route. Please check your connection and try again.")
 
