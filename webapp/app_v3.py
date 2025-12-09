@@ -173,7 +173,11 @@ def geocode_address(address: str) -> Optional[Dict]:
             return None
     except Exception as e:
         logger.exception(f"Geolocation error for '{address}': {type(e).__name__}: {e}")
-        st.error(f"Geolocation error: {e}")
+        # Show user-friendly error message
+        if "timeout" in str(e).lower() or "connection" in str(e).lower():
+            st.error("⚠️ Cannot connect to location service. Please check your internet connection and try again.")
+        else:
+            st.error(f"⚠️ Unable to find location. Please check the address and try again.")
         return None
 
 
