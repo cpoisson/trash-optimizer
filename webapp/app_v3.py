@@ -5,6 +5,8 @@ from typing import cast, Any
 import requests
 import pandas as pd
 import pydeck as pdk
+import folium
+from streamlit_folium import st_folium
 import openrouteservice
 from geopy.geocoders import Nominatim
 from dotenv import load_dotenv
@@ -699,88 +701,6 @@ def screen_map():
             with col_map:
                 st.markdown("### 🗺️ Route Map")
 
-                # Prepare map layers
-                layers = []
-
-                # Start point - smaller marker
-                start_df = pd.DataFrame([{
-                    "latitude": st.session_state.user_location["lat"],
-                    "longitude": st.session_state.user_location["lon"],
-                    "text": "Start"
-                }])
-                layers.append(
-                    pdk.Layer(
-                        "ScatterplotLayer",
-                        data=start_df,
-                        get_position="[longitude, latitude]",
-                        get_radius=50,
-                        get_fill_color=[0, 255, 0, 220],
-                        pickable=True,
-                    )
-                )
-                layers.append(
-                    pdk.Layer(
-                        "TextLayer",
-                        data=start_df,
-                        get_position="[longitude, latitude]",
-                        get_text="text",
-                        get_size=12,
-                        get_color=[255, 255, 255],
-                        get_alignment_baseline="'bottom'",
-                    )
-                )
-
-                # Drop-off points - smaller markers with labels
-                drop_off_map_df = pd.DataFrame([{
-                    "lat": w["lat"],
-                    "lon": w["lon"],
-                    "name": w["name"],
-                    "text": f"{get_category_icon(w['trash_class'])} {w['trash_class'].replace('_', ' ').title()}"
-                } for w in ordered_waypoints])
-                layers.append(
-                    pdk.Layer(
-                        "ScatterplotLayer",
-                        data=drop_off_map_df,
-                        get_position="[lon, lat]",
-                        get_radius=40,
-                        get_fill_color=[255, 165, 0, 220],
-                        pickable=True,
-                    )
-                )
-                layers.append(
-                    pdk.Layer(
-                        "TextLayer",
-                        data=drop_off_map_df,
-                        get_position="[lon, lat]",
-                        get_text="text",
-                        get_size=11,
-                        get_color=[255, 255, 255],
-                        get_alignment_baseline="'bottom'",
-                    )
-                )
-
-                # Route paths - use real route geometry from OpenRouteService
-                for segment in route_segments:
-                    if segment.get("geojson") and "features" in segment["geojson"]:
-                        try:
-                            # Extract coordinates from GeoJSON
-                            coords = segment["geojson"]["features"][0]["geometry"]["coordinates"]
-                            route_df = pd.DataFrame([{"coordinates": coords}])
-                            layers.append(
-                                pdk.Layer(
-                                    "PathLayer",
-                                    data=route_df,
-                                    get_path="coordinates",
-                                    get_width=5,
-                                    get_color=[50, 150, 255],
-                                    width_min_pixels=2,
-                                )
-                            )
-                        except (KeyError, IndexError) as e:
-                            logger.warning(f"Could not render route geometry: {e}")
-                            # Fall back to straight line if geometry parsing fails
-                            pass
-
                 # Calculate center and zoom to fit all points
                 all_lats = [st.session_state.user_location["lat"]] + [w["lat"] for w in ordered_waypoints]
                 all_lons = [st.session_state.user_location["lon"]] + [w["lon"] for w in ordered_waypoints]
@@ -804,20 +724,101 @@ def screen_map():
                 else:  # Wide spread
                     zoom_level = 11
 
-                # Render map with dark style to match location screen
-                st.pydeck_chart(
-                    pdk.Deck(
-                        map_style="dark",
-                        initial_view_state=pdk.ViewState(
-                            latitude=center_lat,
-                            longitude=center_lon,
-                            zoom=zoom_level,
-                            pitch=0,
-                        ),
-                        layers=layers
-                    ),
-                    use_container_width=True
+                # Create Folium map
+                m = folium.Map(
+                    location=[center_lat, center_lon],
+                    zoom_start=zoom_level,
+                    tiles="OpenStreetMap"
                 )
+
+                # Add start point marker (green)
+                folium.Marker(
+                    location=[st.session_state.user_location["lat"], st.session_state.user_location["lon"]],
+                    popup="<b>🏁 Start</b><br>Your Location",
+                    tooltip="Start",
+                    icon=folium.Icon(color='green', icon='home', prefix='fa')
+                ).add_to(m)
+
+                # Add route lines first (so they appear under markers)
+                for segment in route_segments:
+                    if segment.get("geojson") and "features" in segment["geojson"]:
+                        try:
+                            # Extract coordinates from GeoJSON
+                            coords = segment["geojson"]["features"][0]["geometry"]["coordinates"]
+                            # Convert from [lon, lat] to [lat, lon] for Folium
+                            route_coords = [[lat, lon] for lon, lat in coords]
+
+                            # Add polyline for route
+                            folium.PolyLine(
+                                route_coords,
+                                color='#3296FF',
+                                weight=5,
+                                opacity=0.8,
+                                tooltip=f"{segment['distance']/1000:.1f} km • {segment['duration']//60} min"
+                            ).add_to(m)
+                        except (KeyError, IndexError) as e:
+                            logger.warning(f"Could not render route geometry: {e}")
+
+                # Add drop-off point markers (orange)
+                for idx, waypoint in enumerate(ordered_waypoints, 1):
+                    icon_emoji = get_category_icon(waypoint['trash_class'])
+                    category_name = waypoint['trash_class'].replace('_', ' ').title()
+
+                    # Find matching trash items for this waypoint
+                    matching_items = [
+                        item for item in st.session_state.trash_items
+                        if item["category"] == waypoint['trash_class']
+                    ]
+
+                    # Create detailed popup with item thumbnails
+                    popup_html = f"""
+                    <div style="font-family: sans-serif; min-width: 200px;">
+                        <h4 style="margin: 0 0 10px 0; color: #2E7D32;">{icon_emoji} Stop {idx}</h4>
+                        <b>{category_name}</b><br>
+                        <div style="margin: 8px 0;">
+                            <b>📍 {waypoint.get('location_name', 'Collection Point')}</b><br>
+                            <small style="color: #666;">{waypoint.get('address', 'Address unavailable')}</small>
+                        </div>
+                    """
+
+                    # Add matching items info to popup
+                    if matching_items:
+                        popup_html += f"""
+                        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;">
+                            <b>Items to drop:</b><br>
+                        """
+                        for item in matching_items:
+                            conf_pct = item['confidence'] * 100
+                            popup_html += f"""
+                            <div style="margin: 5px 0;">
+                                • {icon_emoji} {category_name}
+                                <small style="color: #666;">({conf_pct:.0f}% confidence)</small>
+                            </div>
+                            """
+                        popup_html += "</div>"
+
+                    popup_html += "</div>"
+
+                    # Enhanced tooltip with address
+                    location_name = waypoint.get('location_name', 'Collection Point')
+                    address_short = waypoint.get('address', '').split(',')[0] if waypoint.get('address') else ''
+                    tooltip_text = f"{icon_emoji} {category_name}"
+                    if address_short:
+                        tooltip_text += f" - {address_short}"
+
+                    folium.Marker(
+                        location=[waypoint["lat"], waypoint["lon"]],
+                        popup=folium.Popup(popup_html, max_width=350),
+                        tooltip=tooltip_text,
+                        icon=folium.Icon(color='orange', icon='trash', prefix='fa')
+                    ).add_to(m)
+
+                # Fit bounds to show all markers
+                bounds = [[min(all_lats), min(all_lons)], [max(all_lats), max(all_lons)]]
+                m.fit_bounds(bounds, padding=[30, 30])
+
+                # Render Folium map (returned_objects=[] prevents rerun on map interaction)
+                st_folium(m, width=None, height=500, use_container_width=True, returned_objects=[])
 
             with col_list:
                 st.markdown("### 📍 Drop-off Locations")

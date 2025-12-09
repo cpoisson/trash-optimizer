@@ -4,6 +4,8 @@ pandas
 streamlit
 Pillow
 pydeck
+folium
+streamlit-folium
 requests
 geopy
 python-dotenv
