@@ -79,6 +79,9 @@ if "drop_off_locations" not in st.session_state:
 if "transport_mode" not in st.session_state:
     st.session_state.transport_mode = "driving-car"
 
+if "cached_route" not in st.session_state:
+    st.session_state.cached_route = None
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -642,6 +645,9 @@ def screen_map():
     trash_categories = [item["category"] for item in st.session_state.trash_items]
     logger.info(f"Generating map for trash categories: {trash_categories}")
 
+    # Check if we have a cached route for current items and transport mode
+    cache_key = f"{','.join(sorted(trash_categories))}_{st.session_state.transport_mode}"
+
     # Fun recycling tips and facts
     recycling_tips = [
         "♻️ Did you know? Recycling one aluminum can saves enough energy to power a TV for 3 hours!",
@@ -676,211 +682,231 @@ def screen_map():
         progress_placeholder.progress(int(progress_value * 100))
         status_placeholder.info(f"{status_message}\n\n{tip}")
 
-    # Step 1: Start calculation
+    # Step 1: Check cache or calculate
     route_segments, ordered_waypoints = None, None
-    try:
-        update_progress(0.1, "🗺️ Starting route calculation...")
 
-        route_segments, ordered_waypoints = calculate_route(
-            st.session_state.user_location,
-            trash_categories,
-            st.session_state.transport_mode,
-            progress_callback=update_progress
-        )
-
-        progress_placeholder.progress(100)
-        status_placeholder.success("✅ Route calculated successfully!")
-        time.sleep(0.8)
-
-    except Exception as e:
-        progress_placeholder.empty()
-        status_placeholder.error(f"Error calculating route: {e}")
-        logger.exception(f"Route calculation failed: {e}")
-
-    finally:
+    # Use cached route if available and matches current state
+    if (st.session_state.cached_route and
+        st.session_state.cached_route.get("cache_key") == cache_key):
+        logger.info("Using cached route")
+        route_segments = st.session_state.cached_route["route_segments"]
+        ordered_waypoints = st.session_state.cached_route["ordered_waypoints"]
         progress_placeholder.empty()
         status_placeholder.empty()
+    else:
+        # Calculate new route
+        try:
+            update_progress(0.1, "🗺️ Starting route calculation...")
 
-        if route_segments and ordered_waypoints:
-            logger.debug(f"Route calculated with {len(route_segments)} segments")
+            route_segments, ordered_waypoints = calculate_route(
+                st.session_state.user_location,
+                trash_categories,
+                st.session_state.transport_mode,
+                progress_callback=update_progress
+            )
 
-            # Calculate totals
-            total_distance = sum(seg["distance"] for seg in route_segments)
-            total_duration = sum(seg["duration"] for seg in route_segments)
+            # Cache the result
+            if route_segments and ordered_waypoints:
+                st.session_state.cached_route = {
+                    "cache_key": cache_key,
+                    "route_segments": route_segments,
+                    "ordered_waypoints": ordered_waypoints
+                }
+                logger.info("Route cached successfully")
 
-            # Show route summary
-            st.success(f"🎯 Route: {len(ordered_waypoints)} stops • {total_distance/1000:.1f} km • {total_duration//60} min")
+            progress_placeholder.progress(100)
+            status_placeholder.success("✅ Route calculated successfully!")
+            time.sleep(0.8)
 
-            # Two-column layout: Map on left, drop-off list on right
-            col_map, col_list = st.columns([3, 2])
+        except Exception as e:
+            progress_placeholder.empty()
+            status_placeholder.error(f"Error calculating route: {e}")
+            logger.exception(f"Route calculation failed: {e}")
 
-            with col_map:
-                st.markdown("### 🗺️ Route Map")
+        finally:
+            progress_placeholder.empty()
+            status_placeholder.empty()
 
-                # Calculate center and zoom to fit all points
-                all_lats = [st.session_state.user_location["lat"]] + [w["lat"] for w in ordered_waypoints]
-                all_lons = [st.session_state.user_location["lon"]] + [w["lon"] for w in ordered_waypoints]
-                center_lat = sum(all_lats) / len(all_lats)
-                center_lon = sum(all_lons) / len(all_lons)
+    if route_segments and ordered_waypoints:
+        logger.debug(f"Route calculated with {len(route_segments)} segments")
 
-                # Calculate zoom level based on bounding box
-                lat_range = max(all_lats) - min(all_lats)
-                lon_range = max(all_lons) - min(all_lons)
-                max_range = max(lat_range, lon_range)
+        # Calculate totals
+        total_distance = sum(seg["distance"] for seg in route_segments)
+        total_duration = sum(seg["duration"] for seg in route_segments)
 
-                # Dynamic zoom: tighter zoom for closer points
-                if max_range < 0.01:  # Very close points (< 1km)
-                    zoom_level = 15
-                elif max_range < 0.02:  # Close points (< 2km)
-                    zoom_level = 14
-                elif max_range < 0.05:  # Medium distance (< 5km)
-                    zoom_level = 13
-                elif max_range < 0.1:  # Further points (< 10km)
-                    zoom_level = 12
-                else:  # Wide spread
-                    zoom_level = 11
+        # Show route summary
+        st.success(f"🎯 Route: {len(ordered_waypoints)} stops • {total_distance/1000:.1f} km • {total_duration//60} min")
 
-                # Create Folium map
-                m = folium.Map(
-                    location=[center_lat, center_lon],
-                    zoom_start=zoom_level,
-                    tiles="OpenStreetMap"
-                )
+        # Two-column layout: Map on left, drop-off list on right
+        col_map, col_list = st.columns([3, 2])
 
-                # Add start point marker (green)
-                folium.Marker(
-                    location=[st.session_state.user_location["lat"], st.session_state.user_location["lon"]],
-                    popup="<b>🏁 Start</b><br>Your Location",
-                    tooltip="Start",
-                    icon=folium.Icon(color='green', icon='home', prefix='fa')
-                ).add_to(m)
+        with col_map:
+            st.markdown("### 🗺️ Route Map")
 
-                # Add route lines first (so they appear under markers)
-                for segment in route_segments:
-                    if segment.get("geojson") and "features" in segment["geojson"]:
-                        try:
-                            # Extract coordinates from GeoJSON
-                            coords = segment["geojson"]["features"][0]["geometry"]["coordinates"]
-                            # Convert from [lon, lat] to [lat, lon] for Folium
-                            route_coords = [[lat, lon] for lon, lat in coords]
+            # Calculate center and zoom to fit all points
+            all_lats = [st.session_state.user_location["lat"]] + [w["lat"] for w in ordered_waypoints]
+            all_lons = [st.session_state.user_location["lon"]] + [w["lon"] for w in ordered_waypoints]
+            center_lat = sum(all_lats) / len(all_lats)
+            center_lon = sum(all_lons) / len(all_lons)
 
-                            # Add polyline for route
-                            folium.PolyLine(
-                                route_coords,
-                                color='#3296FF',
-                                weight=5,
-                                opacity=0.8,
-                                tooltip=f"{segment['distance']/1000:.1f} km • {segment['duration']//60} min"
-                            ).add_to(m)
-                        except (KeyError, IndexError) as e:
-                            logger.warning(f"Could not render route geometry: {e}")
+            # Calculate zoom level based on bounding box
+            lat_range = max(all_lats) - min(all_lats)
+            lon_range = max(all_lons) - min(all_lons)
+            max_range = max(lat_range, lon_range)
 
-                # Add drop-off point markers (orange)
-                for idx, waypoint in enumerate(ordered_waypoints, 1):
-                    icon_emoji = get_category_icon(waypoint['trash_class'])
-                    category_name = waypoint['trash_class'].replace('_', ' ').title()
+            # Dynamic zoom: tighter zoom for closer points
+            if max_range < 0.01:  # Very close points (< 1km)
+                zoom_level = 15
+            elif max_range < 0.02:  # Close points (< 2km)
+                zoom_level = 14
+            elif max_range < 0.05:  # Medium distance (< 5km)
+                zoom_level = 13
+            elif max_range < 0.1:  # Further points (< 10km)
+                zoom_level = 12
+            else:  # Wide spread
+                zoom_level = 11
 
-                    # Find matching trash items for this waypoint
-                    matching_items = [
-                        item for item in st.session_state.trash_items
-                        if item["category"] == waypoint['trash_class']
-                    ]
+            # Create Folium map
+            m = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=zoom_level,
+                tiles="OpenStreetMap"
+            )
 
-                    # Create detailed popup with item thumbnails
-                    popup_html = f"""
-                    <div style="font-family: sans-serif; min-width: 200px;">
-                        <h4 style="margin: 0 0 10px 0; color: #2E7D32;">{icon_emoji} Stop {idx}</h4>
-                        <b>{category_name}</b><br>
-                        <div style="margin: 8px 0;">
-                            <b>📍 {waypoint.get('location_name', 'Collection Point')}</b><br>
-                            <small style="color: #666;">{waypoint.get('address', 'Address unavailable')}</small>
-                        </div>
+            # Add start point marker (green)
+            folium.Marker(
+                location=[st.session_state.user_location["lat"], st.session_state.user_location["lon"]],
+                popup="<b>🏁 Start</b><br>Your Location",
+                tooltip="Start",
+                icon=folium.Icon(color='green', icon='home', prefix='fa')
+            ).add_to(m)
+
+            # Add route lines first (so they appear under markers)
+            for segment in route_segments:
+                if segment.get("geojson") and "features" in segment["geojson"]:
+                    try:
+                        # Extract coordinates from GeoJSON
+                        coords = segment["geojson"]["features"][0]["geometry"]["coordinates"]
+                        # Convert from [lon, lat] to [lat, lon] for Folium
+                        route_coords = [[lat, lon] for lon, lat in coords]
+
+                        # Add polyline for route
+                        folium.PolyLine(
+                            route_coords,
+                            color='#3296FF',
+                            weight=5,
+                            opacity=0.8,
+                            tooltip=f"{segment['distance']/1000:.1f} km • {segment['duration']//60} min"
+                        ).add_to(m)
+                    except (KeyError, IndexError) as e:
+                        logger.warning(f"Could not render route geometry: {e}")
+
+            # Add drop-off point markers (orange)
+            for idx, waypoint in enumerate(ordered_waypoints, 1):
+                icon_emoji = get_category_icon(waypoint['trash_class'])
+                category_name = waypoint['trash_class'].replace('_', ' ').title()
+
+                # Find matching trash items for this waypoint
+                matching_items = [
+                    item for item in st.session_state.trash_items
+                    if item["category"] == waypoint['trash_class']
+                ]
+
+                # Create detailed popup with item thumbnails
+                popup_html = f"""
+                <div style="font-family: sans-serif; min-width: 200px;">
+                    <h4 style="margin: 0 0 10px 0; color: #2E7D32;">{icon_emoji} Stop {idx}</h4>
+                    <b>{category_name}</b><br>
+                    <div style="margin: 8px 0;">
+                        <b>📍 {waypoint.get('location_name', 'Collection Point')}</b><br>
+                        <small style="color: #666;">{waypoint.get('address', 'Address unavailable')}</small>
+                    </div>
+                """
+
+                # Add matching items info to popup
+                if matching_items:
+                    popup_html += f"""
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;">
+                        <b>Items to drop:</b><br>
                     """
-
-                    # Add matching items info to popup
-                    if matching_items:
+                    for item in matching_items:
+                        conf_pct = item['confidence'] * 100
                         popup_html += f"""
-                        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;">
-                            <b>Items to drop:</b><br>
+                        <div style="margin: 5px 0;">
+                            • {icon_emoji} {category_name}
+                            <small style="color: #666;">({conf_pct:.0f}% confidence)</small>
+                        </div>
                         """
-                        for item in matching_items:
-                            conf_pct = item['confidence'] * 100
-                            popup_html += f"""
-                            <div style="margin: 5px 0;">
-                                • {icon_emoji} {category_name}
-                                <small style="color: #666;">({conf_pct:.0f}% confidence)</small>
-                            </div>
-                            """
-                        popup_html += "</div>"
-
                     popup_html += "</div>"
 
-                    # Enhanced tooltip with address
-                    location_name = waypoint.get('location_name', 'Collection Point')
-                    address_short = waypoint.get('address', '').split(',')[0] if waypoint.get('address') else ''
-                    tooltip_text = f"{icon_emoji} {category_name}"
-                    if address_short:
-                        tooltip_text += f" - {address_short}"
+                popup_html += "</div>"
 
-                    folium.Marker(
-                        location=[waypoint["lat"], waypoint["lon"]],
-                        popup=folium.Popup(popup_html, max_width=350),
-                        tooltip=tooltip_text,
-                        icon=folium.Icon(color='orange', icon='trash', prefix='fa')
-                    ).add_to(m)
+                # Enhanced tooltip with address
+                location_name = waypoint.get('location_name', 'Collection Point')
+                address_short = waypoint.get('address', '').split(',')[0] if waypoint.get('address') else ''
+                tooltip_text = f"{icon_emoji} {category_name}"
+                if address_short:
+                    tooltip_text += f" - {address_short}"
 
-                # Fit bounds to show all markers
-                bounds = [[min(all_lats), min(all_lons)], [max(all_lats), max(all_lons)]]
-                m.fit_bounds(bounds, padding=[30, 30])
+                folium.Marker(
+                    location=[waypoint["lat"], waypoint["lon"]],
+                    popup=folium.Popup(popup_html, max_width=350),
+                    tooltip=tooltip_text,
+                    icon=folium.Icon(color='orange', icon='trash', prefix='fa')
+                ).add_to(m)
 
-                # Render Folium map (returned_objects=[] prevents rerun on map interaction)
-                st_folium(m, width=None, height=500, use_container_width=True, returned_objects=[])
+            # Fit bounds to show all markers
+            bounds = [[min(all_lats), min(all_lons)], [max(all_lats), max(all_lons)]]
+            m.fit_bounds(bounds, padding=[30, 30])
 
-            with col_list:
-                # Header with global Google Maps navigation
-                col_header, col_nav = st.columns([2, 1])
-                with col_header:
-                    st.markdown("### 📍 Locations")
-                with col_nav:
-                    # Build waypoints string for multi-stop Google Maps route
-                    waypoints_str = "|".join([f"{w['lat']},{w['lon']}" for w in ordered_waypoints])
-                    gmaps_full_route = f"https://www.google.com/maps/dir/?api=1&origin={st.session_state.user_location['lat']},{st.session_state.user_location['lon']}&destination={ordered_waypoints[-1]['lat']},{ordered_waypoints[-1]['lon']}&waypoints={waypoints_str}"
-                    st.markdown(f"[🗺️ Navigate]({gmaps_full_route})")
+            # Render Folium map (returned_objects=[] prevents rerun on map interaction)
+            st_folium(m, width=None, height=500, use_container_width=True, returned_objects=[])
 
-                for seg_idx, segment in enumerate(route_segments, 1):
-                    # Find items for this destination
-                    destination_name = segment["to"]
-                    items_for_stop = []
-                    for item in st.session_state.trash_items:
-                        for waypoint in ordered_waypoints:
-                            if waypoint["name"] == destination_name and waypoint.get("trash_class") == item["category"]:
-                                items_for_stop.append(item)
+        with col_list:
+            # Header with global Google Maps navigation
+            col_header, col_nav = st.columns([2, 1])
+            with col_header:
+                st.markdown("### 📍 Locations")
+            with col_nav:
+                # Build waypoints string for multi-stop Google Maps route
+                waypoints_str = "|".join([f"{w['lat']},{w['lon']}" for w in ordered_waypoints])
+                gmaps_full_route = f"https://www.google.com/maps/dir/?api=1&origin={st.session_state.user_location['lat']},{st.session_state.user_location['lon']}&destination={ordered_waypoints[-1]['lat']},{ordered_waypoints[-1]['lon']}&waypoints={waypoints_str}"
+                st.markdown(f"[🗺️ Navigate]({gmaps_full_route})")
 
-                    # Get waypoint for address
-                    waypoint = next((w for w in ordered_waypoints if w["name"] == destination_name), None)
+            for seg_idx, segment in enumerate(route_segments, 1):
+                # Find items for this destination
+                destination_name = segment["to"]
+                items_for_stop = []
+                for item in st.session_state.trash_items:
+                    for waypoint in ordered_waypoints:
+                        if waypoint["name"] == destination_name and waypoint.get("trash_class") == item["category"]:
+                            items_for_stop.append(item)
 
-                    # Distance and duration
-                    dist_km = segment["distance"] / 1000
-                    dur_min = segment["duration"] // 60
+                # Get waypoint for address
+                waypoint = next((w for w in ordered_waypoints if w["name"] == destination_name), None)
 
-                    # Build compact summary for expander header
-                    if items_for_stop:
-                        items_text = ", ".join([f"{get_category_icon(item['category'])} {item['category'].replace('_', ' ').title()}" for item in items_for_stop])
-                        summary = f"**{seg_idx}.** {items_text} • {dist_km:.1f}km • {dur_min}min"
-                    else:
-                        summary = f"**{seg_idx}.** {dist_km:.1f}km • {dur_min}min"
+                # Distance and duration
+                dist_km = segment["distance"] / 1000
+                dur_min = segment["duration"] // 60
 
-                    # Collapsible expander for details
-                    with st.expander(summary, expanded=False):
-                        # Location name
-                        if waypoint and waypoint.get("location_name"):
-                            st.markdown(f"📍 **{waypoint.get('location_name')}**")
+                # Build compact summary for expander header
+                if items_for_stop:
+                    items_text = ", ".join([f"{get_category_icon(item['category'])} {item['category'].replace('_', ' ').title()}" for item in items_for_stop])
+                    summary = f"**{seg_idx}.** {items_text} • {dist_km:.1f}km • {dur_min}min"
+                else:
+                    summary = f"**{seg_idx}.** {dist_km:.1f}km • {dur_min}min"
 
-                        # Address
-                        if waypoint and waypoint.get("address"):
-                            st.caption(waypoint.get('address'))
-        else:
-            st.warning("Could not calculate route. Please check your connection and try again.")
+                # Collapsible expander for details
+                with st.expander(summary, expanded=False):
+                    # Location name
+                    if waypoint and waypoint.get("location_name"):
+                        st.markdown(f"📍 **{waypoint.get('location_name')}**")
+
+                    # Address
+                    if waypoint and waypoint.get("address"):
+                        st.caption(waypoint.get('address'))
+    else:
+        st.warning("Could not calculate route. Please check your connection and try again.")
 
     # Back button only
     st.markdown("---")
