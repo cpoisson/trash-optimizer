@@ -159,29 +159,50 @@ def classify_trash_image(image: Image.Image) -> Dict:
 
 
 def geocode_address(address: str) -> Optional[Dict]:
-    """Convert address to coordinates."""
-    try:
-        logger.info(f"Geocoding address: {address}")
-        geolocator = Nominatim(user_agent="trash_optimizer_v3")
-        location = geolocator.geocode(address)
+    """Convert address to coordinates with retry logic."""
+    import time
 
-        if location:
-            # cast for type-checkers; geocode returns a Location
-            location = cast(Any, location)
-            logger.info(f"Address '{address}' geocoded successfully: lat={location.latitude}, lon={location.longitude}")
-            return {"lat": location.latitude, "lon": location.longitude}
-        else:
-            logger.warning(f"Could not geocode address: {address} (not found)")
-            st.error(f"Address not found: {address}")
-            return None
-    except Exception as e:
-        logger.exception(f"Geolocation error for '{address}': {type(e).__name__}: {e}")
-        # Show user-friendly error message
-        if "timeout" in str(e).lower() or "connection" in str(e).lower():
-            st.error("⚠️ Cannot connect to location service. Please check your internet connection and try again.")
-        else:
-            st.error(f"⚠️ Unable to find location. Please check the address and try again.")
-        return None
+    max_retries = 2
+    retry_delay = 2  # seconds
+
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                logger.info(f"Geocoding retry attempt {attempt}/{max_retries} for address: {address}")
+                time.sleep(retry_delay)
+            else:
+                logger.info(f"Geocoding address: {address}")
+
+            geolocator = Nominatim(user_agent="trash_optimizer_v3")
+            location = geolocator.geocode(address)
+
+            if location:
+                # cast for type-checkers; geocode returns a Location
+                location = cast(Any, location)
+                logger.info(f"Address '{address}' geocoded successfully: lat={location.latitude}, lon={location.longitude}")
+                return {"lat": location.latitude, "lon": location.longitude}
+            else:
+                logger.warning(f"Could not geocode address: {address} (not found)")
+                st.error(f"Address not found: {address}")
+                return None
+        except Exception as e:
+            logger.exception(f"Geolocation error for '{address}' (attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}: {e}")
+
+            # If this is the last attempt, show error message
+            if attempt == max_retries:
+                # Show user-friendly error message
+                if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                    st.error("⚠️ Cannot connect to location service after multiple attempts. Please check your internet connection and try again.")
+                else:
+                    st.error(f"⚠️ Unable to find location after multiple attempts. Please check the address and try again.")
+                return None
+            else:
+                # Show retry message
+                if attempt == 0:
+                    with st.spinner(f"Connection issue detected. Retrying... ({attempt + 1}/{max_retries})"):
+                        continue
+
+    return None
 
 
 def get_drop_off_points(trash_categories: List[str], user_location: Dict) -> pd.DataFrame:
