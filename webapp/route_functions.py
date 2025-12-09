@@ -35,14 +35,24 @@ def get_route_matrix(df, starting_point, road_client, profile="driving-car"):
 
     # 2) Destinations = liste de listes Python pures
     dest_coords = []
+    valid_indices = []
 
     for idx, row in df.iterrows():
+        lon_raw = row.get("Longitude", row.get("lon"))
+        lat_raw = row.get("Latitude", row.get("lat"))
+        if lon_raw is None or lat_raw is None:
+            print(f"Ligne {idx} ignorée, coordonnées manquantes : {lon_raw}, {lat_raw}")
+            continue
         try:
-            lon = float(row["Longitude"])
-            lat = float(row["Latitude"])
+            lon = float(lon_raw)
+            lat = float(lat_raw)
             dest_coords.append([lon, lat])
+            valid_indices.append(idx)
         except (ValueError, TypeError) as e:
-            print(f"Ligne {idx} ignorée, coordonnées invalides : {row['Longitude']}, {row['Latitude']} ({e})")
+            print(f"Ligne {idx} ignorée, coordonnées invalides : {lon_raw}, {lat_raw} ({e})")
+
+    if not dest_coords:
+        return df
 
     # 3) Locations = source + destinations
     locations = [src_coord] + dest_coords
@@ -56,11 +66,19 @@ def get_route_matrix(df, starting_point, road_client, profile="driving-car"):
         destinations=list(range(1, len(locations)))  # index des destinations
     )
 
-    # 3) Add to DF
+    # 5) Add to DF, aligning distances to valid rows only
     df = df.copy()
-    df["distance_m"] = matrix["distances"][0]
-    df["duration_s"] = matrix["durations"][0]
-    return df
+    df["distance_m"] = None
+    df["duration_s"] = None
+    distances = matrix.get("distances", [])
+    durations = matrix.get("durations", [])
+
+    if distances and durations:
+        for pos, df_idx in enumerate(valid_indices):
+            df.at[df_idx, "distance_m"] = distances[0][pos]
+            df.at[df_idx, "duration_s"] = durations[0][pos]
+
+    return df.dropna(subset=["distance_m", "duration_s"])
 
 def get_dropoff(
     road_client,
@@ -69,7 +87,7 @@ def get_dropoff(
     prob_threshold=0.15,
     profile="driving-car",
     minimizer="distance",
-    keep_top_k=100,
+    keep_top_k=20,
     progress_callback=None
 ):
     #Get all Trash Class that are "worth" exploring based on the proba threshold
@@ -122,6 +140,6 @@ def get_dropoff(
         cols_to_check = ["Trash_class", "Latitude", "Longitude", "distance_m", "duration_s"]  # les colonnes sûres
         result_df = pd.concat(dfs, ignore_index=True).drop_duplicates(subset=cols_to_check)
         return [
-    {"trash_type": row["Trash_class"], "lat": row["Latitude"], "lon": row["Longitude"], "distance_m": row["distance_m"], "duration_s": row["duration_s"]}
+    {"trash_type": row["Trash_class"], "lat": row["Latitude"], "lon": row["Longitude"], "distance_m": row["distance_m"], "duration_s": row["duration_s"], "address": row.get("Address", ""), "name": row.get("Name", "")}
     for _, row in result_df.iterrows()
 ]
