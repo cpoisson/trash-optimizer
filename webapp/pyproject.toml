@@ -1,0 +1,32 @@
+[project]
+name = "trash-optimizer-webapp"
+version = "0.1.0"
+description = "Streamlit webapp for trash route optimization"
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit==1.52.1",
+    "pandas==2.3.3",
+    "pillow==12.0.0",
+    "requests==2.32.5",
+    "python-dotenv==1.2.1",
+    # Mapping and routing
+    "folium==0.20.0",
+    "streamlit-folium==0.25.3",
+    "pydeck==0.9.1",
+    "openrouteservice==2.3.3",
+    "geopy==2.4.1",
+    # Google Cloud
+    "google-cloud-bigquery==3.38.0",
+    "google-auth==2.43.0",
+    "google-auth-oauthlib==1.2.2",
+    "google-api-core==2.28.1",
+    "protobuf==6.33.2",
+    "db-dtypes==1.4.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["query"]

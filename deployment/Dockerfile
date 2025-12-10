@@ -12,13 +12,20 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements files from parent context
-COPY inference/requirements.txt /app/inference_requirements.txt
-COPY webapp/requirements.txt /app/webapp_requirements.txt
+# Install UV using the official installer
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r /app/inference_requirements.txt && \
-    pip install --no-cache-dir -r /app/webapp_requirements.txt
+# Copy pyproject.toml files first (better Docker layer caching)
+COPY inference/pyproject.toml /app/inference/pyproject.toml
+COPY webapp/pyproject.toml /app/webapp/pyproject.toml
+
+# Create minimal __init__.py files for package discovery
+RUN mkdir -p /app/inference/app /app/webapp/query && \
+    touch /app/inference/app/__init__.py /app/webapp/query/__init__.py
+
+# Install Python dependencies with UV (faster than pip, pinned versions)
+RUN uv pip install --system --no-cache /app/inference && \
+    uv pip install --system --no-cache /app/webapp
 
 # Copy application code from parent context
 COPY inference/ /app/inference/

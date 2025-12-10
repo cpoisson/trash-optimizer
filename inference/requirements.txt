@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-torch
-torchvision
-Pillow
-python-multipart
-huggingface-hub
-python-dotenv
