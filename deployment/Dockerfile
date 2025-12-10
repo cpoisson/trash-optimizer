@@ -15,13 +15,13 @@ RUN apt-get update && apt-get install -y \
 # Install UV using the official installer
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy requirements files from parent context
-COPY inference/requirements.txt /app/inference_requirements.txt
-COPY webapp/requirements.txt /app/webapp_requirements.txt
+# Copy pyproject.toml files from parent context (pinned dependencies)
+COPY inference/pyproject.toml /app/inference/pyproject.toml
+COPY webapp/pyproject.toml /app/webapp/pyproject.toml
 
-# Install Python dependencies with UV (faster than pip)
-RUN uv pip install --system --no-cache -r /app/inference_requirements.txt && \
-    uv pip install --system --no-cache -r /app/webapp_requirements.txt
+# Install Python dependencies with UV (faster than pip, pinned versions)
+RUN uv pip install --system --no-cache /app/inference && \
+    uv pip install --system --no-cache /app/webapp
 
 # Copy application code from parent context
 COPY inference/ /app/inference/
