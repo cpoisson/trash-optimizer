@@ -15,9 +15,13 @@ RUN apt-get update && apt-get install -y \
 # Install UV using the official installer
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy pyproject.toml files from parent context (pinned dependencies)
+# Copy pyproject.toml files first (better Docker layer caching)
 COPY inference/pyproject.toml /app/inference/pyproject.toml
 COPY webapp/pyproject.toml /app/webapp/pyproject.toml
+
+# Create minimal __init__.py files for package discovery
+RUN mkdir -p /app/inference/app /app/webapp/query && \
+    touch /app/inference/app/__init__.py /app/webapp/query/__init__.py
 
 # Install Python dependencies with UV (faster than pip, pinned versions)
 RUN uv pip install --system --no-cache /app/inference && \
