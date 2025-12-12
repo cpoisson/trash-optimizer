@@ -1,10 +1,8 @@
 # Trash Optimizer
 
 <p align=center>
-<img src="docs/assets/trash-optimizer-mascot.png" alt="Logo" width="130"/>
+<img src="docs/assets/trash-optimizer-mascot.png" alt="Logo" width="200"/>
 </p>
-
-Identify, Navigate, Trash
 
 ## Context
 
