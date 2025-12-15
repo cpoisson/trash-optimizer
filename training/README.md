@@ -2,29 +2,6 @@
 
 This module provides a flexible and extensible system for training image classification models on any classification dataset. It supports multiple architectures, configurable training parameters, and easy experiment management.
 
-## 📁 Project Structure
-
-```
-training/
-├── train.py                    # Main CLI entry point
-├── Makefile                    # Training orchestration
-├── config/
-│   ├── base_config.py         # Base training configuration
-│   └── model_configs.py       # Model-specific configs
-├── models/
-│   └── model_factory.py       # Model creation for all architectures
-├── data/
-│   ├── dataset.py             # TrashDataset class
-│   ├── transforms.py          # Data augmentation strategies
-│   └── loader.py              # DataLoader creation
-├── training_lib/
-│   ├── trainer.py             # Training loop logic
-│   └── evaluator.py           # Evaluation & metrics
-└── utils/
-    ├── device.py              # Device detection
-    └── visualization.py       # Plotting functions
-```
-
 ## 🚀 Quick Start
 
 ### Using Makefile (Recommended)
@@ -216,32 +193,6 @@ Edit `training_lib/trainer.py`:
 # Replace CrossEntropyLoss with custom loss
 self.criterion = FocalLoss(alpha=1, gamma=2)
 ```
-
-## 📈 Monitoring Training
-
-View training progress:
-```bash
-# Watch training history
-tail -f <output_dir>/training_history.txt
-
-# Monitor GPU usage (if using CUDA)
-watch -n 1 nvidia-smi
-```
-
-## 🐛 Troubleshooting
-
-### Out of Memory
-- Reduce batch size: `--batch-size 16`
-- Use smaller model: `--model efficientnet_b0`
-
-### Slow Training
-- Increase batch size: `--batch-size 64`
-- Increase num_workers in `config/base_config.py`
-
-### Poor Performance
-- Increase epochs: `--epochs 100`
-- Adjust learning rate: `--learning-rate 0.0002`
-- Check data augmentation in `data/transforms.py`
 
 ## 🧹 Maintenance
 
