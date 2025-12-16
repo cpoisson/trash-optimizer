@@ -65,19 +65,6 @@ NANTES_BASE_URL_V2 = "https://data.nantesmetropole.fr/api/explore/v2.1/catalog/d
 
 
 # =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
-
-# Note: clean_duplicates function now provided by bigquery_utils module
-
-
-# Note: clean_dataframe_for_bq function now provided by bigquery_utils module
-
-
-# Note: upload_to_bigquery function now provided by bigquery_utils module
-
-
-# =============================================================================
 # SECTION 1: Food Waste Collection Points (Biodéchets)
 # =============================================================================
 

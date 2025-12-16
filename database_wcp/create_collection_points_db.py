@@ -5,9 +5,6 @@ Creates and maintains a unified BigQuery dataset for trash collection points
 with dynamic schema expansion and prioritized data ingestion.
 """
 
-# install required libraries
-# pip install google-cloud-bigquery pandas google-auth python-dotenv
-
 import os
 import re
 import json
