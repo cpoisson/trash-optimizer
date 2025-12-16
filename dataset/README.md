@@ -1,4 +1,4 @@
-# Dataset builder — data/README.md
+# Dataset builder
 
 ## Purpose
 - Build and preprocess image datasets for Trash Optimizer.
