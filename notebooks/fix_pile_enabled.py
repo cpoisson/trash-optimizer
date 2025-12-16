@@ -1,16 +1,39 @@
-from google.cloud import bigquery
+#!/usr/bin/env python3
+"""
+Fix Is_Pile_enabled Column
 
-# Set credentials
+This script updates the ecosystem_collection_points_with_coords table
+to ensure that all locations accepting car batteries also accept small batteries (piles).
+"""
+
+from google.cloud import bigquery
+from dotenv import load_dotenv
 import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/dariaserbichenko/code/DariaSerb/key-gcp/trash-optimizer-479913-91e59ecc96c9.json"
+import bigquery_utils as bq_utils
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get configuration from environment variables
+CREDENTIALS_PATH = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+PROJECT = os.getenv('GCP_PROJECT')
+DATASET = os.getenv('GCP_DATASET')
+TABLE = "ecosystem_collection_points_with_coords"
+
+# Validate required environment variables
+if not all([CREDENTIALS_PATH, PROJECT, DATASET]):
+    raise ValueError(
+        "Missing required environment variables. Please check your .env file.\n"
+        "Required: GOOGLE_APPLICATION_CREDENTIALS, GCP_PROJECT, GCP_DATASET\n"
+        "Copy .env.template to .env and fill in your values."
+    )
+
+# Set GCP credentials
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = CREDENTIALS_PATH
 
 # Initialize client
-PROJECT = "trash-optimizer-479913"
-DATASET = "nantes"
-TABLE = "ecosystem_collection_points_with_coords"
 table_id = f"{PROJECT}.{DATASET}.{TABLE}"
-
-client = bigquery.Client(project=PROJECT)
+client = bq_utils.get_bigquery_client(PROJECT)
 
 print("🔧 FIXING Is_Pile_enabled COLUMN")
 print("="*50)

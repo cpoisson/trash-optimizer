@@ -32,18 +32,32 @@ import sys
 import pandas as pd
 from google.cloud import bigquery
 from google.api_core.exceptions import NotFound, BadRequest
+from dotenv import load_dotenv
+import bigquery_utils as bq_utils
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
-# Set GCP credentials path
-GCP_CREDENTIALS_PATH = "/Users/dariaserbichenko/code/DariaSerb/key-gcp/trash-optimizer-479913-91e59ecc96c9.json"
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GCP_CREDENTIALS_PATH
+# Load environment variables from .env file
+load_dotenv()
 
-# BigQuery configuration
-PROJECT = "trash-optimizer-479913"
-DATASET = "nantes"
+# Get configuration from environment variables
+GCP_CREDENTIALS_PATH = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+PROJECT = os.getenv('GCP_PROJECT')
+DATASET = os.getenv('GCP_DATASET')
+DATA_DIR = os.getenv('DATA_DIR', '.')
+
+# Validate required environment variables
+if not all([GCP_CREDENTIALS_PATH, PROJECT, DATASET]):
+    raise ValueError(
+        "Missing required environment variables. Please check your .env file.\n"
+        "Required: GOOGLE_APPLICATION_CREDENTIALS, GCP_PROJECT, GCP_DATASET\n"
+        "Copy .env.template to .env and fill in your values."
+    )
+
+# Set GCP credentials
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GCP_CREDENTIALS_PATH
 
 # API endpoints
 NANTES_BASE_URL_V1 = "https://data.nantesmetropole.fr/api/records/1.0/search/"
@@ -54,268 +68,13 @@ NANTES_BASE_URL_V2 = "https://data.nantesmetropole.fr/api/explore/v2.1/catalog/d
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def clean_duplicates(df, strategy='coordinates'):
-    """
-    Remove duplicates based on different strategies
-
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Input DataFrame
-    strategy : str
-        'coordinates', 'address', or 'strict'
-
-    Returns:
-    --------
-    pd.DataFrame
-        Deduplicated DataFrame
-    """
-    df_clean = df.copy()
-
-    # Extract coordinates
-    df_clean['lat'] = df_clean['geo_point_2d'].apply(lambda x: round(x[0], 6) if isinstance(x, list) else None)
-    df_clean['lon'] = df_clean['geo_point_2d'].apply(lambda x: round(x[1], 6) if isinstance(x, list) else None)
-    df_clean['adresse_clean'] = df_clean['adresse'].str.lower().str.strip()
-
-    # Choose deduplication strategy
-    if strategy == 'coordinates':
-        # Keep first entry for each unique coordinate
-        df_deduped = df_clean.drop_duplicates(subset=['lat', 'lon'], keep='first')
-
-    elif strategy == 'address':
-        # Keep first entry for each unique address/commune
-        df_deduped = df_clean.drop_duplicates(subset=['adresse_clean', 'commune'], keep='first')
-
-    elif strategy == 'strict':
-        # Keep first entry for exact matches (excluding geo_point_2d list)
-        cols = [col for col in df_clean.columns if col not in ['geo_point_2d']]
-        df_deduped = df_clean.drop_duplicates(subset=cols, keep='first')
-
-    else:
-        raise ValueError("Strategy must be 'coordinates', 'address', or 'strict'")
-
-    # Clean up temporary columns
-    df_deduped = df_deduped.drop(columns=['lat', 'lon', 'adresse_clean'], errors='ignore')
-
-    print(f"Original rows: {len(df)}")
-    print(f"After {strategy} deduplication: {len(df_deduped)}")
-    print(f"Removed {len(df) - len(df_deduped)} duplicates")
-
-    return df_deduped
+# Note: clean_duplicates function now provided by bigquery_utils module
 
 
-def clean_dataframe_for_bq(df_input):
-    """
-    Basic cleaning for BigQuery, preserving coordinate structure
-
-    Parameters:
-    -----------
-    df_input : pd.DataFrame
-        Input DataFrame
-
-    Returns:
-    --------
-    pd.DataFrame
-        Cleaned DataFrame ready for BigQuery upload
-    """
-    df_clean_bq = df_input.copy()
-
-    print("🧹 Cleaning DataFrame for BigQuery...")
-
-    # 1. Fix column names
-    original_cols = df_clean_bq.columns.tolist()
-    df_clean_bq.columns = [str(col).replace(' ', '_').replace('-', '_').replace('.', '_').lower()
-                          for col in df_clean_bq.columns]
-
-    print(f"   Renamed columns: {dict(zip(original_cols, df_clean_bq.columns))}")
-
-    # 2. Handle geo_point_2d - keep as string or extract coordinates
-    if 'geo_point_2d' in df_clean_bq.columns:
-        print("   Processing geo_point_2d column...")
-
-        # Option 1: Keep as string (if you want to preserve the list structure as text)
-        df_clean_bq['geo_point_2d_str'] = df_clean_bq['geo_point_2d'].astype(str)
-
-        # Option 2: Extract latitude and longitude as separate columns
-        try:
-            df_clean_bq['latitude'] = df_clean_bq['geo_point_2d'].apply(
-                lambda x: float(x[0]) if isinstance(x, list) and len(x) > 0 else None
-            )
-            df_clean_bq['longitude'] = df_clean_bq['geo_point_2d'].apply(
-                lambda x: float(x[1]) if isinstance(x, list) and len(x) > 1 else None
-            )
-            print(f"   Extracted coordinates: {df_clean_bq['latitude'].notna().sum()} valid lat/lon pairs")
-        except Exception as e:
-            print(f"   Warning: Could not extract coordinates: {e}")
-
-    # 3. Convert other lists/dicts to strings
-    for col in df_clean_bq.columns:
-        if col != 'geo_point_2d':  # Skip the original geo_point_2d
-            if df_clean_bq[col].apply(lambda x: isinstance(x, (list, dict, tuple))).any():
-                df_clean_bq[col] = df_clean_bq[col].astype(str)
-                print(f"   Converted {col} to string (contains lists/dicts)")
-
-    # 4. Fill NaN values
-    for col in df_clean_bq.columns:
-        if df_clean_bq[col].dtype == 'object':
-            df_clean_bq[col] = df_clean_bq[col].fillna('')
-        elif pd.api.types.is_numeric_dtype(df_clean_bq[col]):
-            # For numeric columns, you might want to keep NaN or fill with 0
-            # df_clean_bq[col] = df_clean_bq[col].fillna(0)  # Uncomment if needed
-            pass
-
-    # 5. Remove the original list column if we created string version
-    if 'geo_point_2d' in df_clean_bq.columns and 'geo_point_2d_str' in df_clean_bq.columns:
-        df_clean_bq = df_clean_bq.drop(columns=['geo_point_2d'])
-        print("   Dropped original geo_point_2d column (kept string version)")
-
-    print(f"   Final columns: {list(df_clean_bq.columns)}")
-
-    return df_clean_bq
+# Note: clean_dataframe_for_bq function now provided by bigquery_utils module
 
 
-def upload_to_bigquery(df, table_name, project=PROJECT, dataset=DATASET):
-    """
-    Upload DataFrame to BigQuery
-
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame to upload
-    table_name : str
-        Name of the BigQuery table
-    project : str
-        GCP project ID
-    dataset : str
-        BigQuery dataset name
-    """
-    table_id = f"{project}.{dataset}.{table_name}"
-
-    print("\n" + "=" * 60)
-    print(f"UPLOADING TO BIGQUERY: {table_name}")
-    print("=" * 60)
-
-    # Initialize client
-    client = bigquery.Client(project=project)
-    print(f"✅ BigQuery client initialized successfully")
-
-    # Check dataset
-    dataset_ref = f"{project}.{dataset}"
-    try:
-        dataset_obj = client.get_dataset(dataset_ref)
-        print(f"✅ Dataset '{dataset}' exists")
-        print(f"   Location: {dataset_obj.location}")
-    except NotFound:
-        print(f"📁 Creating dataset '{dataset}'...")
-        dataset_obj = bigquery.Dataset(dataset_ref)
-        dataset_obj.location = "EU"
-        dataset_obj = client.create_dataset(dataset_obj, timeout=30)
-        print(f"✅ Dataset created")
-        print(f"   Location: {dataset_obj.location}")
-
-    # Display DataFrame info
-    print(f"\n📊 Data to upload:")
-    print(f"   Rows: {len(df):,}")
-    print(f"   Columns: {len(df.columns)}")
-
-    # Prepare DataFrame - ensure no lists/dicts
-    df_clean = df.copy()
-
-    # Clean column names for BigQuery compatibility
-    df_clean.columns = df_clean.columns.str.replace('[^a-zA-Z0-9_]', '_', regex=True)
-    print(f"\n🧹 Cleaning data for BigQuery...")
-
-    conversions = 0
-    for col in df_clean.columns:
-        # Convert lists/dicts to strings
-        if df_clean[col].apply(lambda x: isinstance(x, (list, dict, tuple))).any():
-            df_clean[col] = df_clean[col].astype(str)
-            conversions += 1
-            print(f"   Converted {col} to string")
-
-    # Fill NaN values for string columns
-    nan_count = df_clean.isna().sum().sum()
-    if nan_count > 0:
-        print(f"   Found {nan_count} NaN values")
-        for col in df_clean.columns:
-            if df_clean[col].dtype == 'object':
-                df_clean[col] = df_clean[col].fillna('')
-
-    print(f"   Cleaned shape: {df_clean.shape}")
-
-    # Convert DataFrame to CSV in memory
-    print("\n📄 Converting DataFrame to CSV in memory...")
-    csv_buffer = io.StringIO()
-    df_clean.to_csv(csv_buffer, index=False, encoding='utf-8')
-    csv_content = csv_buffer.getvalue().encode('utf-8')
-
-    # Create job configuration
-    job_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_TRUNCATE",  # Will replace existing table
-        autodetect=True,                     # Let BigQuery detect schema
-        source_format=bigquery.SourceFormat.CSV,
-        skip_leading_rows=1,                 # Skip header row
-        max_bad_records=100,                 # Allow some bad records
-        encoding='UTF-8',
-        allow_quoted_newlines=True
-    )
-
-    print(f"\n⬆️  Uploading {len(df_clean):,} rows to table '{table_name}'...")
-
-    # Upload from CSV
-    try:
-        # Create file-like object
-        file_obj = io.BytesIO(csv_content)
-
-        # Submit job
-        job = client.load_table_from_file(
-            file_obj,
-            table_id,
-            job_config=job_config
-        )
-
-        print("   Job submitted. Waiting for completion...")
-        job.result()  # Wait for completion
-
-        # Verify upload
-        table = client.get_table(table_id)
-        print(f"\n✅ SUCCESS!")
-        print(f"   Table: {table_id}")
-        print(f"   Rows uploaded: {table.num_rows:,}")
-        print(f"   Table size: {table.num_bytes / (1024*1024):.2f} MB")
-        print(f"   Created: {table.created.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Show schema preview
-        print(f"\n📐 Schema preview (first 5 columns):")
-        for i, field in enumerate(table.schema[:5], 1):
-            print(f"   {i}. {field.name:20} : {field.field_type}")
-
-        if len(table.schema) > 5:
-            print(f"   ... and {len(table.schema) - 5} more columns")
-
-    except Exception as e:
-        print(f"\n❌ Upload failed: {e}")
-
-        # Try alternative method
-        print("\n🔄 Trying alternative upload method...")
-        try:
-            # Try direct DataFrame upload
-            direct_job_config = bigquery.LoadJobConfig(
-                write_disposition="WRITE_TRUNCATE",
-                autodetect=True,
-                max_bad_records=100
-            )
-
-            direct_job = client.load_table_from_dataframe(df_clean, table_id, job_config=direct_job_config)
-            direct_job.result()
-
-            table = client.get_table(table_id)
-            print(f"✅ Direct upload successful!")
-            print(f"   Rows uploaded: {table.num_rows:,}")
-
-        except Exception as e2:
-            print(f"❌ Alternative method also failed: {e2}")
-            print(f"\n💡 You can check the saved CSV file and upload it manually via Google Cloud Console")
+# Note: upload_to_bigquery function now provided by bigquery_utils module
 
 
 # =============================================================================
@@ -352,31 +111,36 @@ print(f"First element length: {len(df['geo_point_2d'][0])}")
 
 # Try different deduplication strategies
 print("\n=== DEDUPLICATION STRATEGIES ===\n")
+
+# First extract coordinates for deduplication
+df_with_coords = bq_utils.extract_coordinates_from_dict(df, 'geo_point_2d')
+
 for strategy in ['coordinates', 'address', 'strict']:
-    df_test = clean_duplicates(df, strategy=strategy)
+    df_test = bq_utils.clean_duplicates(df_with_coords, strategy=strategy)
     print()
 
 # Apply coordinate-based deduplication
 print("Original shape:", df.shape)
-df_clean = clean_duplicates(df, strategy='coordinates')
+df_clean = bq_utils.clean_duplicates(df_with_coords, strategy='coordinates')
 print("\nCleaned data shape:", df_clean.shape)
 print("\nFirst few rows of cleaned data:")
 print(df_clean[['adresse', 'commune', 'geo_point_2d']].head())
 
-# Extract coordinates (geo_point_2d is a list of two numbers [lat, lon])
-df_clean['lat'] = df_clean['geo_point_2d'].apply(lambda x: float(x[0]) if isinstance(x, list)
-                                                  and len(x) > 0 else None)
-df_clean['lon'] = df_clean['geo_point_2d'].apply(lambda x: float(x[1]) if isinstance(x, list)
-                                                  and len(x) > 1 else None)
-print("Successfully extracted coordinates as [lat, lon]")
+# Coordinates already extracted during deduplication
+print(f"Coordinates available: {df_clean['lat'].notna().sum()} rows with valid lat/lon")
 
 # Save to CSV
-df_clean.to_csv('alimentary_garbage.csv', index=False)
-print("DataFrame saved as 'alimentary_garbage.csv'")
+csv_file = os.path.join(DATA_DIR, 'alimentary_garbage.csv')
+df_clean.to_csv(csv_file, index=False)
+print(f"DataFrame saved as '{csv_file}'")
 
-# Upload to BigQuery
-df_bq_ready = clean_dataframe_for_bq(df_clean)
-upload_to_bigquery(df_bq_ready, 'alimentary_garbage_clean')
+# Upload to BigQuery using utility function
+bq_utils.upload_dataframe_to_bigquery(
+    df_clean,
+    'alimentary_garbage_clean',
+    PROJECT,
+    DATASET
+)
 
 
 # =============================================================================
@@ -425,21 +189,16 @@ if 'identifiant' in df1.columns:
 else:
     print("No 'identifiant' column found")
 
-# Extract coordinates from dictionaries
-df1['lon'] = df1['geo_point_2d'].apply(
-    lambda x: float(x['lon']) if isinstance(x, dict) and 'lon' in x else None
-)
-df1['lat'] = df1['geo_point_2d'].apply(
-    lambda x: float(x['lat']) if isinstance(x, dict) and 'lat' in x else None
-)
-print(f"Successfully extracted coordinates for {df1['lon'].notna().sum()} rows")
+# Extract coordinates using utility function
+df1 = bq_utils.extract_coordinates_from_dict(df1, 'geo_point_2d')
 
 # Save to CSV
-df1.to_csv('ecopoints.csv', index=False)
-print("DataFrame saved as 'ecopoints.csv'")
+csv_file = os.path.join(DATA_DIR, 'ecopoints.csv')
+df1.to_csv(csv_file, index=False)
+print(f"DataFrame saved as '{csv_file}'")
 
-# Upload to BigQuery
-upload_to_bigquery(df1, 'ecopoints')
+# Upload to BigQuery using utility function
+bq_utils.upload_dataframe_to_bigquery(df1, 'ecopoints', PROJECT, DATASET)
 
 
 # =============================================================================
@@ -480,16 +239,18 @@ for col in key_columns:
         unique_count = df2[col].nunique()
         print(f"  {col}: {dup_count} duplicates ({unique_count} unique values)")
 
-# Extract coordinates
-df2[['lat', 'lon']] = df2['position'].str.split(',', expand=True).astype(float)
-print(f"Successfully extracted coordinates for {df2['lon'].notna().sum()} rows")
+# Extract coordinates (position column has lat,lon format)
+if 'position' in df2.columns:
+    df2[['lat', 'lon']] = df2['position'].str.split(',', expand=True).astype(float)
+    print(f"Successfully extracted coordinates for {df2['lon'].notna().sum()} rows")
 
 # Save to CSV
-df2.to_csv('collection_centres_PdL_region.csv', index=False)
-print("DataFrame saved as 'collection_centres_PdL_region.csv'")
+csv_file = os.path.join(DATA_DIR, 'collection_centres_PdL_region.csv')
+df2.to_csv(csv_file, index=False)
+print(f"DataFrame saved as '{csv_file}'")
 
-# Upload to BigQuery
-upload_to_bigquery(df2, 'collection_centres_pdl')
+# Upload to BigQuery using utility function
+bq_utils.upload_dataframe_to_bigquery(df2, 'collection_centres_pdl', PROJECT, DATASET)
 
 
 # =============================================================================
@@ -566,21 +327,16 @@ for col in actual_key_columns:
 # Check geo_point_2d structure
 print(f"\ngeo_point_2d sample: {df3['geo_point_2d'][0]}")
 
-# Extract coordinates from dictionaries
-df3['lon'] = df3['geo_point_2d'].apply(
-    lambda x: float(x['lon']) if isinstance(x, dict) and 'lon' in x else None
-)
-df3['lat'] = df3['geo_point_2d'].apply(
-    lambda x: float(x['lat']) if isinstance(x, dict) and 'lat' in x else None
-)
-print(f"Successfully extracted coordinates for {df3['lon'].notna().sum()} rows")
+# Extract coordinates using utility function
+df3 = bq_utils.extract_coordinates_from_dict(df3, 'geo_point_2d')
 
 # Save to CSV
-df3.to_csv('location_dropoff_points_nantes.csv', index=False)
-print("DataFrame saved as 'location_dropoff_points_nantes.csv'")
+csv_file = os.path.join(DATA_DIR, 'location_dropoff_points_nantes.csv')
+df3.to_csv(csv_file, index=False)
+print(f"DataFrame saved as '{csv_file}'")
 
-# Upload to BigQuery
-upload_to_bigquery(df3, 'location_dropoff_points_nantes')
+# Upload to BigQuery using utility function
+bq_utils.upload_dataframe_to_bigquery(df3, 'location_dropoff_points_nantes', PROJECT, DATASET)
 
 
 # =============================================================================

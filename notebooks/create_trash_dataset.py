@@ -6,7 +6,7 @@ with dynamic schema expansion and prioritized data ingestion.
 """
 
 # install required libraries
-# pip install google-cloud-bigquery pandas google-auth
+# pip install google-cloud-bigquery pandas google-auth python-dotenv
 
 import os
 import re
@@ -17,19 +17,33 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from google.cloud import bigquery
 from google.api_core.exceptions import NotFound
+from dotenv import load_dotenv
+import bigquery_utils as bq_utils
 
 # ========================================================
 # CONFIGURATION
 # ========================================================
 
-# Set up Google Cloud credentials
-CREDENTIALS_PATH = "/Users/dariaserbichenko/code/DariaSerb/key-gcp/trash-optimizer-479913-91e59ecc96c9.json"
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = CREDENTIALS_PATH
+# Load environment variables from .env file
+load_dotenv()
 
-# BigQuery configuration
-PROJECT = "trash-optimizer-479913"
-DATASET = "nantes"
+# Get configuration from environment variables
+CREDENTIALS_PATH = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+PROJECT = os.getenv('GCP_PROJECT')
+DATASET = os.getenv('GCP_DATASET')
 TARGET_TABLE = "trash_collection_points"
+DATA_DIR = os.getenv('DATA_DIR', '.')
+
+# Validate required environment variables
+if not all([CREDENTIALS_PATH, PROJECT, DATASET]):
+    raise ValueError(
+        "Missing required environment variables. Please check your .env file.\n"
+        "Required: GOOGLE_APPLICATION_CREDENTIALS, GCP_PROJECT, GCP_DATASET\n"
+        "Copy .env.template to .env and fill in your values."
+    )
+
+# Set GCP credentials
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = CREDENTIALS_PATH
 
 # ========================================================
 # BIGQUERY CLIENT INITIALIZATION
@@ -38,9 +52,13 @@ TARGET_TABLE = "trash_collection_points"
 print("=" * 60)
 print("INITIALIZING TRASH COLLECTION DATASET CREATION")
 print("=" * 60)
+print(f"   Project: {PROJECT}")
+print(f"   Dataset: {DATASET}")
+print(f"   Target Table: {TARGET_TABLE}")
 
 # Initialize BigQuery client
-client = bigquery.Client(project=PROJECT)
+client = bq_utils.get_bigquery_client(PROJECT)
+bq_utils.ensure_dataset_exists(client, PROJECT, DATASET)
 
 # ========================================================
 # 1. FOOD WASTE DATA (PRIORITY 1)
@@ -530,7 +548,7 @@ print("-" * 40)
 
 def load_textile_data():
     """Load textile collection points from CSV file"""
-    textile_file = "Textile_relais.csv"
+    textile_file = os.path.join(DATA_DIR, os.getenv('TEXTILE_CSV_FILE', 'Textile_relais.csv'))
 
     if not os.path.exists(textile_file):
         print(f"⚠️ Textile file not found: {textile_file}")
@@ -615,7 +633,7 @@ print("-" * 40)
 
 def load_mixed_data():
     """Load mixed waste collection points from CSV file"""
-    mixed_file = "pharmacies_garages_ressourceries_nantes.csv"
+    mixed_file = os.path.join(DATA_DIR, os.getenv('MIXED_WASTE_CSV_FILE', 'pharmacies_garages_ressourceries_nantes.csv'))
 
     if not os.path.exists(mixed_file):
         print(f"⚠️ Mixed waste file not found: {mixed_file}")
