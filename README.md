@@ -6,7 +6,7 @@
 
 ## Context
 
-Trash Optimizer is a 2 week project developed during Le Wagon AI & Data Science Bootcamp (Nantes 2025 November batch) by a team of four students:
+Trash Optimizer is a two-week project developed during Le Wagon AI & Data Science Bootcamp (Nantes 2025 Q4 batch) by a team of four students:
 - Paul Baudry
 - Charles Poisson
 - Simon Hingant
