@@ -101,58 +101,6 @@ http://localhost:8501
 
 **Note**: All Docker commands should be run from the `deployment/` directory.
 
-## Secret Management Best Practices
-
-### Development Environment
-
-**Option 1: Environment Variables + Volume Mount** (Current approach)
-- Store sensitive values in `deployment/.env` (gitignored)
-- Mount GCP JSON file as read-only volume
-- Simple and suitable for single-server deployments
-
-### Production Environment
-
-**Option 2: Docker Secrets** (For Docker Swarm)
-```bash
-# Create secrets
-echo "your_hf_token" | docker secret create hf_token -
-echo "your_api_key" | docker secret create geo_api_key -
-docker secret create gcp_credentials deployment/secrets/gcp-credentials.json
-
-# Reference in docker-compose.yml
-secrets:
-  - hf_token
-  - geo_api_key
-  - gcp_credentials
-```
-
-**Option 3: External Secret Management**
-- Use AWS Secrets Manager, HashiCorp Vault, or Google Secret Manager
-- Inject secrets at runtime via init containers or sidecar patterns
-- Best for Kubernetes deployments
-
-### Cloud Platform Deployments
-
-**Google Cloud Run:**
-```bash
-# Store secrets in Secret Manager
-gcloud secrets create hf-token --data-file=-
-gcloud secrets create geo-api-key --data-file=-
-
-# Deploy with secrets mounted
-gcloud run deploy trash-optimizer \
-  --image gcr.io/your-project/trash-optimizer \
-  --set-secrets="HF_TOKEN=hf-token:latest,GEO_SERVICE_API_KEY=geo-api-key:latest" \
-  --service-account=your-service-account@project.iam.gserviceaccount.com
-```
-
-**AWS ECS/Fargate:**
-- Use AWS Systems Manager Parameter Store or Secrets Manager
-- Reference secrets in task definition with `secrets` parameter
-
-**Azure Container Instances:**
-- Use Azure Key Vault
-- Mount secrets as secure environment variables
 
 ## Monitoring and Logs
 
@@ -181,37 +129,3 @@ cd deployment
 docker-compose up --build -d
 ```
 
-## Troubleshooting
-
-### Model fails to download
-- Check `HF_TOKEN` is valid and has read access
-- Verify `HF_MODEL_REPO_ID` exists and is accessible
-- Check internet connectivity from container
-
-### BigQuery connection errors
-- Verify GCP credentials JSON file is mounted correctly
-- Ensure service account has BigQuery permissions
-- Check `GCP_PROJECT` and `GCP_DATASET` values
-
-### Port conflicts
-- Ensure port 8501 is not already in use: `lsof -i :8501`
-- Change port mapping in docker-compose.yml if needed
-
-## Security Considerations
-
-1. **Never commit secrets**: Add to `.gitignore`:
-   ```
-   deployment/.env
-   deployment/secrets/
-   ```
-
-2. **Use read-only mounts**: Always mount credential files with `:ro` flag
-
-3. **Limit service account permissions**: Use principle of least privilege for GCP service account
-
-4. **Scan images**: Regularly scan for vulnerabilities:
-   ```bash
-   docker scan trash-optimizer:latest
-   ```
-
-5. **Update dependencies**: Keep base image and Python packages up to date
