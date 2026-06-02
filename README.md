@@ -4,6 +4,12 @@
 <img src="docs/assets/trash-optimizer-mascot.png" alt="Logo" width="200"/>
 </p>
 
+<p align="center">
+  <a href="https://huggingface.co/cpoisson/trash-optimizer-models"><img src="https://img.shields.io/badge/🤗%20Model-trash--optimizer--models-yellow" alt="Model on HF"></a>
+  <a href="https://huggingface.co/datasets/cpoisson/trash-optimizer-dataset"><img src="https://img.shields.io/badge/🤗%20Dataset-trash--optimizer--dataset-blue" alt="Dataset on HF"></a>
+  <a href="https://huggingface.co/spaces/cpoisson/trash-optimizer"><img src="https://img.shields.io/badge/🤗%20Demo-Live%20Space-green" alt="Demo on HF"></a>
+</p>
+
 ## Context
 
 Trash Optimizer is a two-week project developed during Le Wagon AI & Data Science Bootcamp (Nantes 2025 Q4 batch) by a team of four students:
@@ -27,7 +33,7 @@ Trash Optimizer addresses two key challenges in waste management: identifying th
 **Machine Learning Model**
 - Fine-tuned EfficientNetB0 architecture for waste classification
 - Trained on 3 labeled datasets comprising 18 waste categories
-- Achieves 90% classification accuracy
+- Achieves **95.07%** classification accuracy (top-1, held-out test set)
 - Extended from base model's 5 relevant categories to full 18-category taxonomy
 
 **Data Infrastructure**
@@ -132,9 +138,13 @@ graph TB
 - **[Webapp Frontend](webapp/README.md)**: Streamlit interface for classification and route optimization
 - **[Deployment](deployment/README.md)**: Docker containerization and cloud deployment guides
 
-## Model Repository
+## 🤗 Hugging Face Resources
 
-Models are hosted on Hugging Face Hub: [https://huggingface.co/cpoisson/trash-optimizer-models](https://huggingface.co/cpoisson/trash-optimizer-models)
+| Resource | Link | Description |
+|---|---|---|
+| **Model repository** | [cpoisson/trash-optimizer-models](https://huggingface.co/cpoisson/trash-optimizer-models) | All trained model versions (EfficientNet-B0, EfficientNetV2-S, ConvNeXt-Tiny) with weights, classification reports, confusion matrices and training curves. Latest model pointer tracked by `latest` file. |
+| **Training dataset** | [cpoisson/trash-optimizer-dataset](https://huggingface.co/datasets/cpoisson/trash-optimizer-dataset) | Assembled dataset — 6,229 images across 18 categories, built from RealWaste + RHWC + custom sources. Exact data used to train the production model. |
+| **Live demo** | [cpoisson/trash-optimizer](https://huggingface.co/spaces/cpoisson/trash-optimizer) | Gradio Space running EfficientNet-B0 inference. Upload any waste photo and get top-5 category predictions with confidence scores. |
 
 ## Docker Deployment
 
